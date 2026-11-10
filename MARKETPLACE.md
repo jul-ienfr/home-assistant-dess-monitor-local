@@ -36,7 +36,8 @@ Règles principales :
 - `custom_components/<domain>/` contient tous les fichiers de l'intégration ;
 - `manifest.json` contient `domain`, `version`, `documentation`,
   `issue_tracker`, `codeowners` et `name` ;
-- la `version` du manifest doit être **identique au tag de la release** ;
+- la `version` du manifest doit correspondre au **tag de la release** (sans le
+  préfixe `v`) ;
 - une **release GitHub publiée** est nécessaire pour que les utilisateurs
   reçoivent une version stable. Un tag seul ne suffit pas : le Marketplace
   retombe alors sur le dernier commit de la branche par défaut ;
@@ -103,7 +104,8 @@ délai de quelques heures est donc normal.
 2. Modifier le code, puis mettre à jour `CHANGELOG.md`.
 3. Incrémenter `version` dans
    `custom_components/dess_monitor_local/manifest.json`. Cette valeur doit
-   être exactement le futur tag.
+   correspondre au futur tag, sans le préfixe `v` (par exemple manifest
+   `1.1.0-beta.3-anenji.3` pour le tag `v1.1.0-beta.3-anenji.3`).
 4. Committer et pousser :
 
    ```bash

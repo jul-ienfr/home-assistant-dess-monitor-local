@@ -241,7 +241,8 @@ Via Marketplace :
    `Paramètres → Appareils et services`.
 
 Le Marketplace installe la dernière **release GitHub publiée**, pas un simple
-tag. La version de `manifest.json` doit être identique au tag. Toute nouvelle
+tag. La version de `manifest.json` doit correspondre au tag (sans le préfixe
+`v`). Toute nouvelle
 version doit donc être publiée sur la branche `archive/dess-monitor-local` ;
 voir [`MARKETPLACE.md`](MARKETPLACE.md).
 
