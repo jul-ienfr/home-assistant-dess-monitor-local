@@ -1,0 +1,1268 @@
+# =============================================================================
+#  Anenji / EASUN / ISolar SMG-II — ESPHome
+#
+#  Onduleur solaire hybride piloté en Modbus RTU (9600 8N1, esclave 0x01).
+#  Carte cible : ESP32dev + transceiver RS485 (MAX485/SP3485)
+#                ou transceiver RS232 (MAX3232) selon le port de l'onduleur.
+#
+#  Carte des registres vérifiée : protocole SMG-II (voir PROTOCOL.md)
+#  Sources : syssi/esphome-smg-ii, jul-ienfr/esphome-anenji-4.2kw-wifi
+#
+#  Validation : esphome config anenji.yaml
+#  Flash      : esphome run anenji.yaml
+# =============================================================================
+
+substitutions:
+  device_name: anenji
+  friendly_name: "Onduleur Van Master"
+  device_comment: "Anenji SMG-II via Modbus RTU"
+
+  # --- Performances / énergie ---
+  cpu_freq: "160MHz"            # 80MHz pour économiser, 240MHz si instable
+  logger_level: "WARN"
+  modbus_update_interval: 10s
+  debug_update_interval: 5s
+
+  # --- Câblage ---
+  uart_tx_pin: GPIO17
+  uart_rx_pin: GPIO16
+  # RS485 uniquement : DE et /RE du MAX485 reliés ensemble à cette broche.
+  # RS232 (MAX3232) : laisser la broche non connectée, elle est inutilisée.
+  de_re_pin: GPIO4
+
+  # --- Batterie (valeurs par défaut pour un parc 24 V) ---
+  # Parc 48 V : doubler toutes les tensions ci-dessous.
+  battery_capacity_wh: "4800"
+  battery_voltage_high: "30.0"
+  battery_voltage_low: "21.0"
+  battery_ovp_min: "24.0"
+  battery_ovp_max: "32.0"
+  battery_charge_min: "24.0"
+  battery_charge_max: "30.0"
+  battery_recovery_min: "20.0"
+  battery_recovery_max: "26.0"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: ${device_comment}
+  min_version: "2025.12.1"
+  project:
+    name: "jul-ienfr.anenji-esphome"
+    version: "2.0.0"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+  cpu_frequency: ${cpu_freq}
+
+# =============================================================================
+#  RÉSEAU
+# =============================================================================
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  output_power: 8.5dB
+  power_save_mode: LIGHT
+  min_auth_mode: WPA2
+  ap:
+    ssid: "Anenji-Fallback"
+    password: !secret fallback_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+  # Pas de redémarrage si Home Assistant est absent (usage en van autonome).
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+safe_mode:
+  boot_is_good_after: 120s
+  num_attempts: 5
+
+# Le serveur web n'est pas activé par défaut : l'API et l'OTA suffisent.
+# Pour l'activer, ajouter (avec des secrets dédiés) :
+# web_server:
+#   port: 80
+#   auth:
+#     username: !secret web_server_username
+#     password: !secret web_server_password
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "CET-1CEST,M3.5.0,M10.5.0/3"
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+logger:
+  level: ${logger_level}
+  # 0 = pas de logs sur l'UART0. Mettre 115200 pour déboguer par USB.
+  baud_rate: 0
+
+# =============================================================================
+#  BUS MODBUS RTU
+# =============================================================================
+uart:
+  - id: uart_bus
+    tx_pin: ${uart_tx_pin}
+    rx_pin: ${uart_rx_pin}
+    baud_rate: 9600
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    # Nécessaire avec un MAX485 : bascule DE/RE automatiquement.
+    flow_control_pin: ${de_re_pin}
+
+modbus:
+  - id: modbus_hub
+    uart_id: uart_bus
+    send_wait_time: 200ms
+
+modbus_controller:
+  - id: anenji
+    address: 0x01
+    modbus_id: modbus_hub
+    setup_priority: -10
+    update_interval: ${modbus_update_interval}
+    command_throttle: 200ms
+    max_cmd_retries: 3
+    offline_skip_updates: 3
+
+# =============================================================================
+#  MESURES (lecture seule) — adresses SMG-II vérifiées
+# =============================================================================
+sensor:
+  # --- RÉSEAU (entrée CA) ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Input Voltage"
+    id: ac_input_voltage
+    address: 202
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:transmission-tower"
+    filters:
+      - multiply: 0.1
+    on_value_range:
+      - above: 260.0
+        then:
+          - logger.log:
+              format: "ALERTE: tension secteur trop haute"
+              level: WARN
+      - below: 190.0
+        then:
+          - logger.log:
+              format: "ALERTE: tension secteur trop basse"
+              level: WARN
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Input Frequency"
+    address: 203
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    icon: "mdi:sine-wave"
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Input Power"
+    address: 204
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:home-lightning-bolt"
+
+  # --- ONDULEUR (étage interne) ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Voltage"
+    address: 205
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:flash"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Current"
+    address: 206
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:current-ac"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Frequency"
+    address: 207
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    icon: "mdi:sine-wave"
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Power"
+    address: 208
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:flash"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Charging Power"
+    address: 209
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:battery-charging"
+
+  # --- SORTIE AC (220 V) ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Output Voltage"
+    address: 210
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:power-plug"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Output Current"
+    address: 211
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:current-ac"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Output Frequency"
+    address: 212
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    icon: "mdi:sine-wave"
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Output Active Power"
+    address: 213
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:power-plug"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "AC Output Apparent Power"
+    address: 214
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "VA"
+    device_class: apparent_power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:power-plug"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Load"
+    address: 225
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:percent"
+
+  # --- BATTERIE ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Voltage"
+    id: battery_voltage
+    address: 215
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:battery"
+    filters:
+      - multiply: 0.1
+    on_value_range:
+      - above: ${battery_voltage_high}
+        then:
+          - logger.log:
+              format: "ALERTE: tension batterie trop haute"
+              level: WARN
+      - below: ${battery_voltage_low}
+        then:
+          - logger.log:
+              format: "ALERTE: tension batterie trop basse"
+              level: WARN
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Current"
+    id: battery_current
+    address: 216
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:current-dc"
+    filters:
+      - multiply: 0.1
+
+  # Convention SMG-II : positif = charge, négatif = décharge.
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Power"
+    id: battery_power
+    address: 217
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:battery-charging"
+    on_value:
+      then:
+        - component.update: charging_power
+        - component.update: discharging_power
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery SOC"
+    id: battery_soc
+    address: 229
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:battery-half"
+    on_value_range:
+      - below: 20
+        then:
+          - logger.log:
+              format: "ALERTE: SOC batterie sous 20%%"
+              level: WARN
+      - below: 10
+        then:
+          - logger.log:
+              format: "CRITIQUE: SOC batterie sous 10%%"
+              level: ERROR
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Current (BMS)"
+    address: 232
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:current-dc"
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Charging Current"
+    address: 233
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:battery-charging"
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "PV Charging Current"
+    address: 234
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:solar-panel"
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.1
+
+  # --- SOLAIRE ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "PV Voltage"
+    address: 219
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:solar-panel"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "PV Current"
+    address: 220
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    icon: "mdi:solar-panel"
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "PV Power"
+    id: pv_power
+    address: 223
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:solar-power"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "PV Charging Power"
+    address: 224
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:solar-power"
+
+  # --- TEMPÉRATURES (registres en °C, sans facteur) ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "DCDC Temperature"
+    address: 226
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:thermometer"
+    on_value_range:
+      - above: 65.0
+        then:
+          - logger.log:
+              format: "ALERTE: température DCDC > 65°C"
+              level: WARN
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Inverter Temperature"
+    address: 227
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:thermometer"
+    on_value_range:
+      - above: 60.0
+        then:
+          - logger.log:
+              format: "ALERTE: température onduleur > 60°C"
+              level: WARN
+
+  # --- ÉNERGIE ---
+  - platform: total_daily_energy
+    name: "PV Energy Today"
+    id: pv_energy_today
+    power_id: pv_power
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    icon: "mdi:solar-panel"
+    restore: true
+
+  # --- DIAGNOSTICS ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Rated Power"
+    address: 643
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    icon: "mdi:information"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Operation Mode ID"
+    id: operation_mode_id
+    address: 201
+    register_type: holding
+    value_type: U_WORD
+    accuracy_decimals: 0
+    internal: true
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Fault Code"
+    id: fault_code
+    address: 100
+    register_type: holding
+    value_type: U_DWORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    icon: "mdi:alert-circle"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Warning Code"
+    id: warning_code
+    address: 108
+    register_type: holding
+    value_type: U_DWORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    icon: "mdi:alert-outline"
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: template
+    name: "Modbus Error Count"
+    id: modbus_error_count
+    icon: "mdi:alert-circle"
+    update_interval: 10s
+    entity_category: diagnostic
+    lambda: |-
+      static bool last_error = false;
+      static int count = 0;
+      bool current_error = id(anenji).status_has_error();
+      if (current_error && !last_error) {
+        count++;
+      }
+      last_error = current_error;
+      return count;
+
+# =============================================================================
+#  CAPTEURS CALCULÉS
+# =============================================================================
+  - platform: template
+    name: "Charging Power"
+    id: charging_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:battery-arrow-up"
+    update_interval: never
+    lambda: |-
+      float p = id(battery_power).state;
+      if (std::isnan(p)) return NAN;
+      return (p > 0.0f) ? p : 0.0f;
+
+  - platform: template
+    name: "Discharging Power"
+    id: discharging_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:battery-arrow-down"
+    update_interval: never
+    lambda: |-
+      float p = id(battery_power).state;
+      if (std::isnan(p)) return NAN;
+      return (p < 0.0f) ? -p : 0.0f;
+
+  - platform: template
+    name: "Battery Autonomy"
+    id: battery_autonomy
+    unit_of_measurement: "min"
+    icon: "mdi:timer-sand"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      float soc = id(battery_soc).state;
+      float power = id(battery_power).state;
+      float capacity_wh = id(battery_capacity).state;
+      if (std::isnan(soc) || std::isnan(power) || std::isnan(capacity_wh) || power >= 0.0f) return NAN;
+      float remaining_wh = (soc / 100.0f) * capacity_wh;
+      return (remaining_wh / (-power)) * 60.0f;
+
+# =============================================================================
+#  TEXT SENSORS / ÉTATS
+# =============================================================================
+text_sensor:
+  - platform: template
+    name: "Operation Mode"
+    icon: "mdi:state-machine"
+    update_interval: 5s
+    lambda: |-
+      if (std::isnan(id(operation_mode_id).state)) return std::string("N/A");
+      switch ((int) id(operation_mode_id).state) {
+        case 0: return std::string("Power On");
+        case 1: return std::string("Standby");
+        case 2: return std::string("Mains");
+        case 3: return std::string("Off-Grid");
+        case 4: return std::string("Bypass");
+        case 5: return std::string("Charging");
+        case 6: return std::string("Fault");
+      }
+      return std::string("Unknown");
+
+  - platform: template
+    name: "Fault"
+    icon: "mdi:alert-circle"
+    update_interval: 30s
+    lambda: |-
+      static const char *const FAULTS[27] = {
+        "Over temperature of inverter module", "Over temperature of DCDC module",
+        "Battery over voltage", "PV module over temperature",
+        "Output short circuit", "Inverter over voltage", "Output over load",
+        "Bus over voltage", "Bus soft start timed out", "PV over current",
+        "PV over voltage", "Battery over current", "Inverter over current",
+        "Bus low voltage", "Reserve (bit 15)", "Inverter DC component too high",
+        "Reserve (bit 17)", "Output current zero bias too large",
+        "Inverter current zero bias too large", "Battery current zero bias too large",
+        "PV current zero bias too large", "Inverter low voltage",
+        "Inverter negative power protection", "Parallel host lost",
+        "Parallel sync signal abnormal", "Battery type incompatible",
+        "Parallel versions incompatible"
+      };
+      if (std::isnan(id(fault_code).state)) return std::string("N/A");
+      uint32_t mask = (uint32_t) id(fault_code).state;
+      if (mask == 0) return std::string("OK");
+      std::string out;
+      for (int i = 0; i < 27; i++) {
+        if (mask & (1UL << i)) {
+          if (!out.empty()) out += "; ";
+          out += FAULTS[i];
+        }
+      }
+      return out;
+
+  - platform: template
+    name: "Warning"
+    icon: "mdi:alert-outline"
+    update_interval: 30s
+    lambda: |-
+      static const char *const WARNINGS[19] = {
+        "Reserve (bit 0)", "Mains waveform abnormal", "Reserve (bit 2)",
+        "Mains low voltage", "Mains over frequency", "Mains low frequency",
+        "PV low voltage", "Over temperature", "Battery low voltage",
+        "Battery not connected", "Overload", "Battery Eq charging",
+        "Battery undervoltage", "Output power derating", "Fan blocked",
+        "PV energy too low", "Parallel communication interrupted",
+        "Output mode inconsistent", "Parallel battery voltage difference"
+      };
+      if (std::isnan(id(warning_code).state)) return std::string("N/A");
+      uint32_t mask = (uint32_t) id(warning_code).state;
+      if (mask == 0) return std::string("OK");
+      std::string out;
+      for (int i = 0; i < 19; i++) {
+        if (mask & (1UL << i)) {
+          if (!out.empty()) out += "; ";
+          out += WARNINGS[i];
+        }
+      }
+      return out;
+
+  - platform: template
+    name: "Modbus Status"
+    update_interval: 10s
+    entity_category: diagnostic
+    lambda: |-
+      if (id(anenji).status_has_error()) return std::string("Error");
+      return std::string("Connected");
+
+# =============================================================================
+#  COMMANDES (écriture) — use_write_multiple requis par le SMG-II
+# =============================================================================
+select:
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Mode"
+    use_write_multiple: true
+    address: 300
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:cog"
+    optionsmap:
+      "Single": 0
+      "Parallel": 1
+      "Phase P1": 2
+      "Phase P2": 3
+      "Phase P3": 4
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Priority"
+    use_write_multiple: true
+    address: 301
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:priority-high"
+    optionsmap:
+      "Utility-PV-Battery (UTI)": 0
+      "PV-Utility-Battery (SOL)": 1
+      "PV-Battery-Utility (SBU)": 2
+      "PV-Utility-Battery (SUB)": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Input Voltage Range"
+    use_write_multiple: true
+    address: 302
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:cog"
+    optionsmap:
+      "Wide": 0
+      "Narrow": 1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Buzzer Mode"
+    use_write_multiple: true
+    address: 303
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:bell"
+    optionsmap:
+      "Silent": 0
+      "Input changes + warnings + faults": 1
+      "Warnings + faults": 2
+      "Faults only": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "LCD Backlight"
+    use_write_multiple: true
+    address: 305
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:lightbulb"
+    optionsmap:
+      "Timed off": 0
+      "Always on": 1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Charging Priority"
+    use_write_multiple: true
+    address: 331
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:battery-charging"
+    optionsmap:
+      "Utility priority": 0
+      "PV priority": 1
+      "PV = Utility": 2
+      "PV only": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Turn On Mode"
+    use_write_multiple: true
+    address: 406
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:power-settings"
+    optionsmap:
+      "Local + remote": 0
+      "Local only": 1
+      "Remote only": 2
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Type"
+    use_write_multiple: true
+    address: 322
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:battery-sync"
+    optionsmap:
+      "AGM": 0
+      "Flooded": 1
+      "User": 2
+      "Li1": 3
+      "Li2": 4
+      "Li3": 5
+      "Li4": 6
+      "Lib": 8
+
+switch:
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "LCD Auto Home"
+    use_write_multiple: true
+    address: 306
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:monitor"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Energy Saving Mode"
+    use_write_multiple: true
+    address: 307
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:leaf"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Overload Auto Restart"
+    use_write_multiple: true
+    address: 308
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:restart"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Over Temperature Auto Restart"
+    use_write_multiple: true
+    address: 309
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:restart-alert"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Overload Transfer To Bypass"
+    use_write_multiple: true
+    address: 310
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:bypass"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Equalization"
+    use_write_multiple: true
+    address: 313
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:battery-sync"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Remote Switch"
+    use_write_multiple: true
+    address: 420
+    register_type: holding
+    bitmask: 0x01
+    entity_category: config
+    icon: "mdi:remote"
+
+number:
+  # --- MODE DEBUG / PRODUCTION (0 = production, 1 = debug) ---
+  - platform: template
+    name: "Debug Mode"
+    id: debug_mode
+    optimistic: true
+    min_value: 0
+    max_value: 1
+    step: 1
+    initial_value: 0
+    mode: slider
+    icon: "mdi:bug"
+    restore_value: true
+    entity_category: config
+    on_value:
+      then:
+        - lambda: |-
+            if (id(debug_mode).state > 0.5f) {
+              id(anenji).set_update_interval(5000);
+              ESP_LOGW("mode", "DEBUG: intervalle Modbus 5s");
+            } else {
+              id(anenji).set_update_interval(10000);
+              ESP_LOGW("mode", "PRODUCTION: intervalle Modbus 10s");
+            }
+
+  - platform: template
+    name: "Battery Capacity"
+    id: battery_capacity
+    optimistic: true
+    min_value: 1000
+    max_value: 20000
+    step: 100
+    initial_value: ${battery_capacity_wh}
+    unit_of_measurement: "Wh"
+    mode: box
+    icon: "mdi:battery"
+    restore_value: true
+    entity_category: config
+
+  # --- SEUILS BATTERIE ---
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Overvoltage Protection"
+    use_write_multiple: true
+    address: 323
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_ovp_min}
+    max_value: ${battery_ovp_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-alert"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Max Charging Voltage"
+    use_write_multiple: true
+    address: 324
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_charge_min}
+    max_value: ${battery_charge_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-charging"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Float Charging Voltage"
+    use_write_multiple: true
+    address: 325
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_charge_min}
+    max_value: ${battery_charge_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-charging-50"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Battery Recovery Voltage (mains)"
+    use_write_multiple: true
+    address: 326
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_recovery_min}
+    max_value: ${battery_recovery_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-sync"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Low DC Cut-off Voltage (mains)"
+    use_write_multiple: true
+    address: 327
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_recovery_min}
+    max_value: ${battery_recovery_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-off"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Low DC Cut-off Voltage (off-grid)"
+    use_write_multiple: true
+    address: 329
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_recovery_min}
+    max_value: ${battery_recovery_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-off-outline"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Voltage Setting"
+    use_write_multiple: true
+    address: 320
+    register_type: holding
+    value_type: U_WORD
+    min_value: 200.0
+    max_value: 240.0
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:power-plug"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Frequency Setting"
+    use_write_multiple: true
+    address: 321
+    register_type: holding
+    value_type: U_WORD
+    min_value: 50.0
+    max_value: 60.0
+    step: 0.01
+    unit_of_measurement: "Hz"
+    mode: box
+    entity_category: config
+    icon: "mdi:sine-wave"
+    lambda: "return x * 0.01f;"
+    write_lambda: "return x * 100.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Max Charging Current"
+    use_write_multiple: true
+    address: 332
+    register_type: holding
+    value_type: U_WORD
+    min_value: 0.0
+    max_value: 120.0
+    step: 0.1
+    unit_of_measurement: "A"
+    mode: slider
+    entity_category: config
+    icon: "mdi:current-ac"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Max Mains Charging Current"
+    use_write_multiple: true
+    address: 333
+    register_type: holding
+    value_type: U_WORD
+    min_value: 0.0
+    max_value: 80.0
+    step: 0.1
+    unit_of_measurement: "A"
+    mode: slider
+    entity_category: config
+    icon: "mdi:transmission-tower"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Equalization Voltage"
+    use_write_multiple: true
+    address: 334
+    register_type: holding
+    value_type: U_WORD
+    min_value: ${battery_charge_min}
+    max_value: ${battery_charge_max}
+    step: 0.1
+    unit_of_measurement: "V"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-sync"
+    lambda: "return x * 0.1f;"
+    write_lambda: "return x * 10.0f;"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Equalization Time"
+    use_write_multiple: true
+    address: 335
+    register_type: holding
+    value_type: U_WORD
+    min_value: 0
+    max_value: 900
+    step: 1
+    unit_of_measurement: "min"
+    mode: box
+    entity_category: config
+    icon: "mdi:timer"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Equalization Timeout"
+    use_write_multiple: true
+    address: 336
+    register_type: holding
+    value_type: U_WORD
+    min_value: 0
+    max_value: 900
+    step: 1
+    unit_of_measurement: "min"
+    mode: box
+    entity_category: config
+    icon: "mdi:timer"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Equalization Interval"
+    use_write_multiple: true
+    address: 337
+    register_type: holding
+    value_type: U_WORD
+    min_value: 1
+    max_value: 90
+    step: 1
+    unit_of_measurement: "d"
+    mode: box
+    entity_category: config
+    icon: "mdi:calendar-repeat"
+
+# =============================================================================
+#  BOUTONS
+# =============================================================================
+button:
+  - platform: template
+    name: "Exit Fault State"
+    icon: "mdi:restore"
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            auto cmd = esphome::modbus_controller::ModbusCommandItem::create_write_multiple_command(id(anenji), 426, 1, {1});
+            id(anenji)->queue_command(cmd);
+
+# =============================================================================
+#  ÉTAT APPAREIL + LED
+# =============================================================================
+binary_sensor:
+  - platform: status
+    name: "Device Online"
+
+output:
+  - platform: ledc
+    pin: GPIO2
+    id: led_output
+    frequency: 1Hz
+
+light:
+  - platform: monochromatic
+    output: led_output
+    name: "Status LED"
+    id: status_led
+    icon: "mdi:led-on"
+    restore_mode: ALWAYS_OFF
+    entity_category: config
