@@ -422,6 +422,7 @@ _OUTPUT_PRIORITY_MAP = {
     0: OutputSourcePriority.UtilityFirst.name,
     1: OutputSourcePriority.SolarFirst.name,
     2: OutputSourcePriority.SBU.name,
+    3: OutputSourcePriority.SUB.name,
 }
 
 _CHARGER_PRIORITY_MAP = {
@@ -466,7 +467,7 @@ def smg2_to_qpiri(c: dict) -> dict:
         "parallel_max_number": "6",
         "reserved_uu": "01",
         "reserved_v": "0",
-        "parallel_mode": "Master",
+        "parallel_mode": "Single",
         "high_battery_voltage_to_battery_mode": f"{c['battery_discharge_recovery_mains']:.1f}",
         "solar_work_condition_in_parallel": "0",
         "solar_max_charging_power_auto_adjust": "1_",

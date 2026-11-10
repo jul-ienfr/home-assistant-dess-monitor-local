@@ -151,6 +151,7 @@ class ModbusAdapter(BaseAdapter):
             OutputSourcePrioritySetting.UTILITY_FIRST: 0,
             OutputSourcePrioritySetting.SOLAR_FIRST: 1,
             OutputSourcePrioritySetting.SBU_PRIORITY: 2,
+            OutputSourcePrioritySetting.SUB_PRIORITY: 3,
         }
         value = mapping.get(mode)
         if value is None:

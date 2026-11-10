@@ -7,6 +7,9 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.dess_monitor_local import HubConfigEntry
+from custom_components.dess_monitor_local.api.commands.direct_command_queue import (
+    get_command_queue,
+)
 from custom_components.dess_monitor_local.api.commands.direct_commands import (
     ChargeSourcePrioritySetting,
     OutputSourcePrioritySetting,
@@ -160,7 +163,7 @@ class InverterOutputPrioritySelect(SelectBase):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
         self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['UtilityFirst', 'SBU', 'Solar']
+        self._attr_options = ['UtilityFirst', 'SBU', 'Solar', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data.get(self._inverter_device.inverter_id) or {}
@@ -179,6 +182,7 @@ class InverterOutputPrioritySelect(SelectBase):
             'SBU': 'SBU',
             'Solar': 'Solar',
             'SolarFirst': 'Solar',
+            'SUB': 'SUB',
         }
         priority = resolve_output_priority(data)
         mapped_priority = mapper.get(priority, priority)
@@ -191,8 +195,9 @@ class InverterOutputPrioritySelect(SelectBase):
                 'UtilityFirst': OutputSourcePrioritySetting.UTILITY_FIRST,
                 'SBU': OutputSourcePrioritySetting.SBU_PRIORITY,
                 'Solar': OutputSourcePrioritySetting.SOLAR_FIRST,
+                'SUB': OutputSourcePrioritySetting.SUB_PRIORITY,
             }
-            queue = self.hass.data["dess_monitor_local_queue"]
+            queue = await get_command_queue(self.hass, self._inverter_device.device_data)
             await queue.enqueue(
                 lambda: set_output_source_priority(self._inverter_device.device_data, map_priority[option]))
             self._attr_current_option = option
@@ -225,7 +230,7 @@ class InverterChargeSourcePrioritySelect(SelectBase):
                 'SolarFirst': ChargeSourcePrioritySetting.SOLAR_FIRST,
                 'SolarAndUtility': ChargeSourcePrioritySetting.SOLAR_AND_UTILITY,
             }
-            queue = self.hass.data["dess_monitor_local_queue"]
+            queue = await get_command_queue(self.hass, self._inverter_device.device_data)
             await queue.enqueue(
                 lambda: set_charge_source_priority(self._inverter_device.device_data, map_priority[option]))
             self._attr_current_option = option
@@ -268,7 +273,7 @@ class InverterMaxUtilityChargingCurrentNumber(SelectBase):
         if option in self._attr_options:
             amps = int(option)
             float_format = self._raw_readback is not None and '.' in self._raw_readback
-            queue = self.hass.data["dess_monitor_local_queue"]
+            queue = await get_command_queue(self.hass, self._inverter_device.device_data)
             await queue.enqueue(
                 lambda: set_max_utility_charge_current(
                     self._inverter_device.device_data, amps, float_format=float_format
