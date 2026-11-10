@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -71,8 +73,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Run the first poll outside the entry-setup path. `async_refresh`
     # records failure in the coordinator instead of raising, and the task is
-    # owned by the config entry so it is cancelled on unload/reload.
-    entry.async_create_background_task(
+    # owned by the config entry so it is cancelled on unload/reload. Keep the
+    # handle too: unload cancels it explicitly *before* draining the command
+    # queues, otherwise a poll waking up mid-unload can create a fresh queue
+    # after the drain and leave a worker task behind.
+    entry.runtime_data.first_refresh_task = entry.async_create_background_task(
         hass,
         entry.runtime_data.direct_coordinator.async_refresh(),
         name="dess_monitor_local_first_refresh",
@@ -83,6 +88,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Stop the initial poll first. The config entry cancels its background
+    # tasks only after async_unload_entry returns, which is too late for the
+    # queue drain below.
+    refresh_task = getattr(entry.runtime_data, "first_refresh_task", None)
+    if refresh_task is not None:
+        refresh_task.cancel()
+        try:
+            await refresh_task
+        except asyncio.CancelledError:
+            pass
+        entry.runtime_data.first_refresh_task = None
+
     # This is called when an entry/configured device is to be removed. The class
     # needs to unload itself, and remove callbacks. See the classes for further
     # details

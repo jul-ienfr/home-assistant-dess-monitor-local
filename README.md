@@ -43,7 +43,10 @@
   instead of guessing entity IDs from the device name. Renaming a control or
   HA prefixing the entity ID no longer silently breaks the SoC estimator.
   Registry changes are watched, so the controls are found after all
-  platforms finish loading.
+  platforms finish loading. The float-deadband lookup is null-safe while
+  those platforms are still being created.
+- **Clean unload**: the initial poll is cancelled before the command queues
+  are drained, so an in-flight poll cannot recreate a queue after unload.
 - Every typed sensor exposes `stale` / `stale_cycles` attributes so
   automations can tell frozen data from live data.
 

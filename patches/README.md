@@ -17,10 +17,10 @@ donc sans changement de mode).
 
 Le fork
 [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-contient déjà ce correctif, plus les correctifs de la version
-`1.1.0-beta.3-anenji.2` (démarrage non bloquant, SOC/apparent power réels,
-gestion des NAK, entités vSoC résolues par registre, etc.). Le patch reste
-utile uniquement pour rester sur le dépôt upstream.
+contient déjà ce correctif, plus les correctifs des versions
+`1.1.0-beta.3-anenji.2` et `.3` (démarrage non bloquant, SOC/apparent power
+réels, gestion des NAK, entités vSoC résolues par registre, déchargement propre,
+etc.). Le patch reste utile uniquement pour rester sur le dépôt upstream.
 
 Application, depuis `/config` :
 

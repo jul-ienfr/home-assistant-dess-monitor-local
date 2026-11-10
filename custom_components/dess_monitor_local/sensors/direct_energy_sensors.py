@@ -699,12 +699,12 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         entity is missing / unavailable, so the deadband keeps working
         exactly as before for users who never touch the new controls."""
         enabled = True
-        switch_state = self._hass.states.get(self._float_deadband_switch_id)
+        switch_state = self._state(self._float_deadband_switch_id)
         if switch_state is not None and switch_state.state in ("on", "off"):
             enabled = switch_state.state == "on"
 
         window = _FLOAT_VOLTAGE_WINDOW_V
-        window_state = self._hass.states.get(self._float_voltage_window_id)
+        window_state = self._state(self._float_voltage_window_id)
         if window_state is not None and window_state.state not in (
             "unknown", "unavailable", None
         ):
@@ -714,7 +714,7 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
                 window = _FLOAT_VOLTAGE_WINDOW_V
 
         noise_floor = _FLOAT_NOISE_FLOOR_A
-        floor_state = self._hass.states.get(self._float_noise_floor_id)
+        floor_state = self._state(self._float_noise_floor_id)
         if floor_state is not None and floor_state.state not in (
             "unknown", "unavailable", None
         ):

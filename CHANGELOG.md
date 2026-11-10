@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0-beta.3-anenji.3 — 2026-11-10
+
+### Fixed
+
+- **vSoC setup no longer fails when the float-deadband controls are not in the
+  registry yet.** The estimator reads those controls through the existing
+  null-safe state helper, so entity creation cannot raise
+  `AttributeError: 'NoneType' object has no attribute 'lower'`.
+- **Clean unload with an in-flight first poll.** The initial refresh task is
+  cancelled and awaited before the endpoint command queues are drained; a poll
+  waking up mid-unload can no longer create a fresh queue and leave a worker
+  task behind.
+
+### Tests
+
+- The full suite (383 tests, including the Home Assistant lifecycle tests)
+  passes against Home Assistant 2026.10.4.
+
 ## 1.1.0-beta.3-anenji.2 — 2026-11-10
 
 ### Fixed
