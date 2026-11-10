@@ -1,6 +1,6 @@
 # Protocole Modbus — Anenji SMG-II
 
-**Version** : 1.0.0 — 2026-11-10
+**Version** : 1.1.0 — 2026-11-10
 
 Ce document décrit la carte de registres utilisée par `anenji.yaml`. Il est la
 référence du dépôt : toute modification du YAML doit être cohérente avec cette
@@ -86,7 +86,7 @@ plages sont celles de la configuration 24 V ; doubler les tensions pour un parc
 
 | Adresse | Entité | Type | Échelle | Plage | Notes |
 |--------:|--------|------|---------|-------|-------|
-| 300 | Output Mode | U_WORD | 1 | 0-4 | Single, Parallel, Phase P1-P3 |
+| 300 | Output Mode | U_WORD | 1 | 0 | **Single uniquement** dans ce YAML : les modes Parallel / Phase P1-P3 exigent plusieurs onduleurs câblés |
 | 301 | Output Priority | U_WORD | 1 | 0-3 | UTI, SOL, SBU, SUB |
 | 302 | Input Voltage Range | U_WORD | 1 | 0-1 | Wide/Narrow |
 | 303 | Buzzer Mode | U_WORD | 1 | 0-3 | |
@@ -97,24 +97,53 @@ plages sont celles de la configuration 24 V ; doubler les tensions pour un parc
 | 309 | Over Temperature Auto Restart | U_WORD bit0 | 1 | 0-1 | |
 | 310 | Overload Transfer To Bypass | U_WORD bit0 | 1 | 0-1 | |
 | 313 | Battery Equalization | U_WORD bit0 | 1 | 0-1 | |
-| 320 | Output Voltage Setting | U_WORD | 0,1 | 200-240 V | |
-| 321 | Output Frequency Setting | U_WORD | 0,01 | 50-60 Hz | |
+| 320 | Output Voltage Setting | U_WORD | 0,1 | 220 / 230 / 240 V | select, pas de valeur continue |
+| 321 | Output Frequency Setting | U_WORD | 0,01 | 50 / 60 Hz | select, pas de valeur continue |
 | 322 | Battery Type | U_WORD | 1 | 0-8 | AGM, Flooded, User, Li1-Li4, Lib |
-| 323 | Battery OVP | U_WORD | 0,1 | 24-32 V | |
+| 323 | Battery OVP | U_WORD | 0,1 | 28-32 V | doit rester **au-dessus** de 324 |
 | 324 | Max Charging Voltage | U_WORD | 0,1 | 24-30 V | |
 | 325 | Float Charging Voltage | U_WORD | 0,1 | 24-30 V | |
 | 326 | Recovery Voltage (mains) | U_WORD | 0,1 | 20-26 V | |
 | 327 | Low DC Cut-off (mains) | U_WORD | 0,1 | 20-26 V | |
 | 329 | Low DC Cut-off (off-grid) | U_WORD | 0,1 | 20-26 V | |
 | 331 | Charging Priority | U_WORD | 1 | 0-3 | |
-| 332 | Max Charging Current | U_WORD | 0,1 | 0-120 A | |
-| 333 | Max Mains Charging Current | U_WORD | 0,1 | 0-80 A | |
+| 332 | Max Charging Current | U_WORD | 0,1 | 0-100 A | maximum réel du modèle 4,2 kW (lu au registre : 100,0 A) |
+| 333 | Max Mains Charging Current | U_WORD | 0,1 | 0-80 A | maximum réel du modèle 4,2 kW (lu au registre : 80,0 A) |
 | 334 | Equalization Voltage | U_WORD | 0,1 | 24-30 V | |
 | 335 | Equalization Time | U_WORD | 1 | 0-900 min | |
 | 336 | Equalization Timeout | U_WORD | 1 | 0-900 min | |
 | 337 | Equalization Interval | U_WORD | 1 | 1-90 j | |
-| 420 | Remote Switch | U_WORD bit0 | 1 | 0-1 | |
-| 426 | Exit Fault State | U_WORD | 1 | écrire 1 | bouton |
+| 341 | SOC Point Back To Utility | U_WORD | 1 | 31-100 % | doit rester **au-dessus** de 343 |
+| 342 | SOC Point Back To Battery | U_WORD | 1 | 60-100 % | doit rester **au-dessus** de 341 |
+| 343 | Low DC Cut-off SOC | U_WORD | 1 | 3-30 % | |
+| 406 | Turn On Mode | U_WORD | 1 | 0-2 | Local+remote, Local only, Remote only |
+| 420 | Remote Output Enable | U_WORD bit0 | 1 | 0-1 | 0 = shutdown, 1 = turn-on |
+| 426 | Exit Fault State | U_WORD | 1 | écrire 1 | bouton ; lecture toujours 0 |
+
+### Validation par le firmware
+
+Le firmware SMG-II **refuse** les valeurs hors plage avec une exception
+Modbus 03 (Illegal Data Value) et conserve l'ancienne valeur. Vérifié sur
+l'appareil : `303=4`, `305=2` et `337=91` sont rejetés. Les bornes du YAML
+restent nécessaires pour empêcher la saisie avant l'envoi et pour documenter
+les limites ; elles ne remplacent pas cette validation.
+
+### Cohérence inter-paramètres
+
+Les bornes individuelles ne suffisent pas : `OVP=28,0 V` et `bulk=30,0 V`
+sont chacune dans leur plage mais incoherentes. Le diagnostic
+`Configuration Incoherent` vérifie en continu :
+
+- `323 > 324 > 325 > 326 > 327` ;
+- `332 <= 100 A` et `333 <= 80 A` ;
+- `343 < 341 < 342` et `342 >= 60 %`.
+
+### Écritures vérifiées sur l'appareil
+
+Les 32 registres configurables (300-420) ont été écrits en FC16 avec leur
+valeur courante puis relus : **32/32 identiques**. Un vrai changement a été
+validé sur `305` (0 → 1 → 0). `426` renvoie l'exception 03 quand aucun défaut
+n'est actif, ce qui est le comportement attendu.
 
 ### Écriture correcte
 

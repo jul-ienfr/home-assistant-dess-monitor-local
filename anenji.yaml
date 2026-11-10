@@ -35,12 +35,19 @@ substitutions:
   battery_capacity_wh: "4800"
   battery_voltage_high: "30.0"
   battery_voltage_low: "21.0"
-  battery_ovp_min: "24.0"
+  # L'OVP doit rester au-dessus de la tension bulk : 24 V permettrait une
+  # protection plus basse que la charge, configuration incoherente.
+  battery_ovp_min: "28.0"
   battery_ovp_max: "32.0"
   battery_charge_min: "24.0"
   battery_charge_max: "30.0"
   battery_recovery_min: "20.0"
   battery_recovery_max: "26.0"
+
+  # Limites du chargeur du modele 4,2 kW / 24 V (lu sur l'onduleur :
+  # registre 332 = 100,0 A, registre 333 = 80,0 A).
+  max_charge_current_a: "100.0"
+  max_mains_charge_current_a: "80.0"
 
 esphome:
   name: ${device_name}
@@ -786,10 +793,10 @@ select:
     icon: "mdi:cog"
     optionsmap:
       "Single": 0
-      "Parallel": 1
-      "Phase P1": 2
-      "Phase P2": 3
-      "Phase P3": 4
+      # Une seule unite : ne pas exposer Parallel / Phase P1-P3. Ces modes
+      # ne sont valides qu'avec plusieurs onduleurs cables et configures ;
+      # les choisir sur une unite seule peut couper ou desynchroniser la
+      # sortie. Les ajouter explicitement apres verification du montage.
 
   - platform: modbus_controller
     modbus_controller_id: anenji
@@ -842,6 +849,31 @@ select:
     optionsmap:
       "Timed off": 0
       "Always on": 1
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Voltage Setting"
+    use_write_multiple: true
+    address: 320
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:power-plug"
+    optionsmap:
+      "220 V": 2200
+      "230 V": 2300
+      "240 V": 2400
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Output Frequency Setting"
+    use_write_multiple: true
+    address: 321
+    value_type: U_WORD
+    entity_category: config
+    icon: "mdi:sine-wave"
+    optionsmap:
+      "50 Hz": 5000
+      "60 Hz": 6000
 
   - platform: modbus_controller
     modbus_controller_id: anenji
@@ -951,7 +983,7 @@ switch:
 
   - platform: modbus_controller
     modbus_controller_id: anenji
-    name: "Remote Switch"
+    name: "Remote Output Enable"
     use_write_multiple: true
     address: 420
     register_type: holding
@@ -1002,6 +1034,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Battery Overvoltage Protection"
+    id: cfg_battery_ovp
     use_write_multiple: true
     address: 323
     register_type: holding
@@ -1019,6 +1052,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Max Charging Voltage"
+    id: cfg_battery_bulk
     use_write_multiple: true
     address: 324
     register_type: holding
@@ -1036,6 +1070,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Float Charging Voltage"
+    id: cfg_battery_float
     use_write_multiple: true
     address: 325
     register_type: holding
@@ -1053,6 +1088,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Battery Recovery Voltage (mains)"
+    id: cfg_battery_recovery
     use_write_multiple: true
     address: 326
     register_type: holding
@@ -1070,6 +1106,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Low DC Cut-off Voltage (mains)"
+    id: cfg_battery_cutoff
     use_write_multiple: true
     address: 327
     register_type: holding
@@ -1087,6 +1124,7 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Low DC Cut-off Voltage (off-grid)"
+    id: cfg_battery_cutoff_offgrid
     use_write_multiple: true
     address: 329
     register_type: holding
@@ -1103,47 +1141,14 @@ number:
 
   - platform: modbus_controller
     modbus_controller_id: anenji
-    name: "Output Voltage Setting"
-    use_write_multiple: true
-    address: 320
-    register_type: holding
-    value_type: U_WORD
-    min_value: 200.0
-    max_value: 240.0
-    step: 0.1
-    unit_of_measurement: "V"
-    mode: box
-    entity_category: config
-    icon: "mdi:power-plug"
-    lambda: "return x * 0.1f;"
-    write_lambda: "return x * 10.0f;"
-
-  - platform: modbus_controller
-    modbus_controller_id: anenji
-    name: "Output Frequency Setting"
-    use_write_multiple: true
-    address: 321
-    register_type: holding
-    value_type: U_WORD
-    min_value: 50.0
-    max_value: 60.0
-    step: 0.01
-    unit_of_measurement: "Hz"
-    mode: box
-    entity_category: config
-    icon: "mdi:sine-wave"
-    lambda: "return x * 0.01f;"
-    write_lambda: "return x * 100.0f;"
-
-  - platform: modbus_controller
-    modbus_controller_id: anenji
     name: "Max Charging Current"
+    id: cfg_max_charge_current
     use_write_multiple: true
     address: 332
     register_type: holding
     value_type: U_WORD
     min_value: 0.0
-    max_value: 120.0
+    max_value: ${max_charge_current_a}
     step: 0.1
     unit_of_measurement: "A"
     mode: slider
@@ -1155,12 +1160,13 @@ number:
   - platform: modbus_controller
     modbus_controller_id: anenji
     name: "Max Mains Charging Current"
+    id: cfg_max_mains_charge_current
     use_write_multiple: true
     address: 333
     register_type: holding
     value_type: U_WORD
     min_value: 0.0
-    max_value: 80.0
+    max_value: ${max_mains_charge_current_a}
     step: 0.1
     unit_of_measurement: "A"
     mode: slider
@@ -1231,6 +1237,57 @@ number:
     entity_category: config
     icon: "mdi:calendar-repeat"
 
+  # --- SEUILS SOC (mode SUB / batterie lithium) ---
+  # Le firmware impose 343 < 341 et 60 <= 342 <= 100. La borne 341 >= 31
+  # garantit deja 341 > 343 (max 30).
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "SOC Point Back To Utility"
+    id: cfg_soc_back_utility
+    use_write_multiple: true
+    address: 341
+    register_type: holding
+    value_type: U_WORD
+    min_value: 31
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-alert"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "SOC Point Back To Battery"
+    id: cfg_soc_back_battery
+    use_write_multiple: true
+    address: 342
+    register_type: holding
+    value_type: U_WORD
+    min_value: 60
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-high"
+
+  - platform: modbus_controller
+    modbus_controller_id: anenji
+    name: "Low DC Cut-off SOC"
+    id: cfg_soc_cutoff
+    use_write_multiple: true
+    address: 343
+    register_type: holding
+    value_type: U_WORD
+    min_value: 3
+    max_value: 30
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    entity_category: config
+    icon: "mdi:battery-low"
+
 # =============================================================================
 #  BOUTONS
 # =============================================================================
@@ -1251,6 +1308,35 @@ button:
 binary_sensor:
   - platform: status
     name: "Device Online"
+
+  # Contrôle de coherence inter-parametres. Les bornes individuelles ne
+  # suffisent pas : OVP 28,0 V avec une charge a 30,0 V reste dans les
+  # bornes mais est physiquement incoherent. Ce capteur passe en probleme
+  # des que l'ordre OVP > bulk > float > recovery > cutoff, l'ordre des
+  # seuils SOC ou les maxima du modele ne sont plus respectes.
+  - platform: template
+    name: "Configuration Incoherent"
+    id: config_incoherent
+    entity_category: diagnostic
+    device_class: problem
+    lambda: |-
+      float ovp = id(cfg_battery_ovp).state;
+      float bulk = id(cfg_battery_bulk).state;
+      float flt = id(cfg_battery_float).state;
+      float rec = id(cfg_battery_recovery).state;
+      float cut = id(cfg_battery_cutoff).state;
+      float soc_util = id(cfg_soc_back_utility).state;
+      float soc_batt = id(cfg_soc_back_battery).state;
+      float soc_cut = id(cfg_soc_cutoff).state;
+      // Avant le premier poll, les etats valent 0 : ne rien publier.
+      if (ovp <= 0.0f || bulk <= 0.0f || flt <= 0.0f || rec <= 0.0f || cut <= 0.0f ||
+          soc_batt <= 0.0f)
+        return {};
+      bool coherent = ovp > bulk && bulk > flt && flt > rec && rec > cut &&
+                      id(cfg_max_charge_current).state <= ${max_charge_current_a} &&
+                      id(cfg_max_mains_charge_current).state <= ${max_mains_charge_current_a} &&
+                      soc_cut < soc_util && soc_util < soc_batt && soc_batt >= 60.0f;
+      return !coherent;
 
 output:
   - platform: ledc

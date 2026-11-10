@@ -69,3 +69,55 @@ pythonw.exe -X utf8 tools\eybond_probe.py --out probe.log
   la connectivité, le PN et les registres avant installation ou en dépannage.
 - Le dongle retourne au cloud quand le script se termine ; aucune commande de
   restauration n'est nécessaire.
+
+## `eybond_audit.py`
+
+Audit complet de l'onduleur à travers le même dongle : lecture de toutes les
+mesures et de toute la configuration, décodage, contrôle des invariants
+physiques et des bornes, puis tests d'écriture FC16.
+
+Le script est conçu pour **ne pas modifier durablement la configuration** :
+
+- `--write-same` réécrit chaque registre avec sa valeur courante, puis relit et
+  compare ;
+- `--toggle 305` bascule le rétroéclairage LCD (0 → 1 → 0) pour prouver qu'une
+  écriture différente est réellement appliquée ;
+- `--invalid-probe` teste des valeurs hors plage sur des registres non
+  critiques (303, 305, 337) et vérifie que le firmware répond par une
+  exception 03 sans changer la valeur ;
+- `--exit-fault` n'écrit `426=1` que si aucun défaut n'est actif ; sinon il
+  s'abstient.
+
+Les tensions batterie, courants de charge, priorités et mode de sortie ne sont
+**jamais** modifiés par l'outil.
+
+### Utilisation
+
+```bash
+pythonw.exe -X utf8 tools\eybond_audit.py \
+  --announce-ip 192.168.68.56 \
+  --target 192.168.68.57 \
+  --timeout 40 \
+  --write-same --toggle 305 --invalid-probe --exit-fault \
+  --report audit.txt --json audit.json --log audit.log
+```
+
+Options principales :
+
+- `--announce-ip` : IP LAN du poste (obligatoire) ;
+- `--target` : IP du dongle pour une annonce unicast, en plus du broadcast ;
+- `--write-same` : test d'écriture de tous les registres configurables ;
+- `--toggle N` : bascule un registre 0/1 puis le restaure ;
+- `--invalid-probe` : vérifie le rejet des valeurs hors plage ;
+- `--exit-fault` : teste `426=1` seulement si aucun défaut n'est actif ;
+- `--report`, `--json`, `--log` : sorties lisible, machine et journal.
+
+### Interprétation
+
+Le rapport se termine par `OK` / `ECHEC` pour chaque section. Un `ECHEC` sur
+`426` avec `exception Modbus 3` et un défaut à zéro est normal : l'onduleur
+refuse de sortir d'un état de défaut qui n'existe pas.
+
+Le script ferme la session proprement ; le dongle retourne au cloud en quelques
+secondes. Comme pour `eybond_probe.py`, arrêter l'intégration Home Assistant
+avant de le lancer.

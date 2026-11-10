@@ -103,7 +103,7 @@ Les trois blocs utilisés par l'intégration ont été lus sans erreur :
 |------|-----------|----------|
 | Défauts | 100–115 | lu |
 | Mesures | 201–231 | lu |
-| Configuration | 300–337 | lu |
+| Configuration | 300–343, 406, 420 | lu |
 
 Exemples de valeurs décodées lors du relevé :
 
@@ -151,6 +151,43 @@ Le correctif de `patches/` a été vérifié sur le dongle :
 - relecture du registre 301 après ce test : toujours `3` (SUB). L'écriture
   était volontairement une écriture de la valeur déjà présente, donc le mode
   de l'onduleur n'a pas changé.
+
+### 4.5 Audit complet du 2026-11-10
+
+L'outil `tools/eybond_audit.py` a relu toutes les mesures et toute la
+configuration, puis testé les écritures. Résultats :
+
+| Contrôle | Résultat |
+|----------|----------|
+| Lecture des blocs 100-115, 201-231, 232-234, 300-343, 406, 420, 426, 643 | OK |
+| Invariants physiques (tensions, fréquences, températures, puissance) | OK |
+| Écriture FC16 valeur identique sur les 32 registres configurables | 32/32 OK |
+| Changement réel (305 rétroéclairage 0 → 1 → 0) | OK |
+| Rejet des valeurs hors plage (303=4, 305=2, 337=91) | exception 03, valeur conservée |
+| `426=1` sans défaut actif | exception 03 (attendu) |
+
+Les correspondances de mesures ont été vérifiées par cohérence :
+
+- `217 = 215 × 216` : 27,9 V × −1,4 A = −39 W ;
+- `208 ≈ 204 − 213` avec la convention positive = sortie onduleur ;
+- `225 = 213 / 643` : 51 W / 4200 W = 1 % ;
+- `202` ≈ `210` et `203` ≈ `212` : entrée et sortie à ~236 V / 50 Hz.
+
+Paramètres présents sur l'onduleur mais absents du YAML avant l'audit :
+`341` (SOC retour réseau), `342` (SOC retour batterie) et `343` (coupure basse
+SOC). Ils ont été ajoutés, avec des bornes cohérentes avec le firmware. Le
+registre `406` (mode d'allumage) était déjà piloté par le YAML mais manquait
+dans `PROTOCOL.md` ; la documentation a été complétée.
+
+Bornes resserrées après l'audit :
+
+- OVP minimum 28,0 V (au lieu de 24,0 V) pour rester au-dessus de la charge ;
+- courant de charge max 100 A et courant réseau max 80 A (maxima réels lus) ;
+- tension de sortie en select 220/230/240 V et fréquence 50/60 Hz ;
+- mode de sortie limité à `Single`, les modes parallèle/phase exigeant
+  plusieurs onduleurs ;
+- diagnostic `Configuration Incoherent` pour les combinaisons
+  inter-paramètres dangereuses.
 
 ## 5. Installation dans Home Assistant
 

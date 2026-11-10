@@ -70,7 +70,7 @@ Toutes les commandes utilisent `use_write_multiple: true` (FC16). Les colonnes
 
 | Adresse | Entité | Type | Échelle | Plage 24 V | Défaut 24 V | Notes |
 |--------:|--------|------|---------|------------|-------------|-------|
-| 300 | Output Mode | U_WORD | 1 | 0-4 | 0 | Single/Parallel/Phase |
+| 300 | Output Mode | U_WORD | 1 | 0 | 0 | Single uniquement dans ce YAML ; Parallel/Phase exigent plusieurs onduleurs |
 | 301 | Output Priority | U_WORD | 1 | 0-3 | 2 | UTI/SOL/SBU/SUB |
 | 302 | Input Voltage Range | U_WORD | 1 | 0-1 | 0 | Wide/Narrow |
 | 303 | Buzzer Mode | U_WORD | 1 | 0-3 | 1 | |
@@ -81,24 +81,28 @@ Toutes les commandes utilisent `use_write_multiple: true` (FC16). Les colonnes
 | 309 | Over Temperature Auto Restart | U_WORD bit0 | 1 | 0-1 | 1 | |
 | 310 | Overload Transfer To Bypass | U_WORD bit0 | 1 | 0-1 | 1 | |
 | 313 | Battery Equalization | U_WORD bit0 | 1 | 0-1 | 0 | |
-| 320 | Output Voltage Setting | U_WORD | 0,1 | 200-240 V | 230,0 V | |
-| 321 | Output Frequency Setting | U_WORD | 0,01 | 50-60 Hz | 50,00 Hz | |
+| 320 | Output Voltage Setting | U_WORD | 0,1 | 220 / 230 / 240 V | 230,0 V | select, pas de valeur continue |
+| 321 | Output Frequency Setting | U_WORD | 0,01 | 50 / 60 Hz | 50,00 Hz | select, pas de valeur continue |
 | 322 | Battery Type | U_WORD | 1 | 0-8 | 0 | AGM/Flooded/User/Li… |
-| 323 | Battery OVP | U_WORD | 0,1 | 24-32 V | 29,2 V | à adapter 48 V |
+| 323 | Battery OVP | U_WORD | 0,1 | 28-32 V | 29,2 V | doit rester > 324 ; à adapter 48 V |
 | 324 | Max Charging Voltage | U_WORD | 0,1 | 24-30 V | 28,8 V | à adapter 48 V |
 | 325 | Float Charging Voltage | U_WORD | 0,1 | 24-30 V | 27,6 V | à adapter 48 V |
 | 326 | Recovery Voltage (mains) | U_WORD | 0,1 | 20-26 V | 24,0 V | à adapter 48 V |
 | 327 | Low DC Cut-off (mains) | U_WORD | 0,1 | 20-26 V | 22,0 V | à adapter 48 V |
 | 329 | Low DC Cut-off (off-grid) | U_WORD | 0,1 | 20-26 V | 21,0 V | à adapter 48 V |
 | 331 | Charging Priority | U_WORD | 1 | 0-3 | 1 | |
-| 332 | Max Charging Current | U_WORD | 0,1 | 0-120 A | 60,0 A | dépend du modèle |
-| 333 | Max Mains Charging Current | U_WORD | 0,1 | 0-80 A | 30,0 A | dépend du modèle |
+| 332 | Max Charging Current | U_WORD | 0,1 | 0-100 A | 60,0 A | max réel du 4,2 kW : 100 A |
+| 333 | Max Mains Charging Current | U_WORD | 0,1 | 0-80 A | 30,0 A | max réel du 4,2 kW : 80 A |
 | 334 | Equalization Voltage | U_WORD | 0,1 | 24-30 V | 29,2 V | |
 | 335 | Equalization Time | U_WORD | 1 | 0-900 min | 60 | |
 | 336 | Equalization Timeout | U_WORD | 1 | 0-900 min | 120 | |
 | 337 | Equalization Interval | U_WORD | 1 | 1-90 j | 30 | |
-| 420 | Remote Switch | U_WORD bit0 | 1 | 0-1 | 0 | |
-| 426 | Exit Fault State | U_WORD | 1 | écrire 1 | — | bouton uniquement |
+| 341 | SOC Point Back To Utility | U_WORD | 1 | 31-100 % | 50 | doit rester > 343 |
+| 342 | SOC Point Back To Battery | U_WORD | 1 | 60-100 % | 95 | doit rester > 341 |
+| 343 | Low DC Cut-off SOC | U_WORD | 1 | 3-30 % | 20 | |
+| 406 | Turn On Mode | U_WORD | 1 | 0-2 | 0 | Local+remote / Local / Remote |
+| 420 | Remote Output Enable | U_WORD bit0 | 1 | 0-1 | 0 | 0 = shutdown, 1 = turn-on |
+| 426 | Exit Fault State | U_WORD | 1 | écrire 1 | — | bouton uniquement ; lecture 0 |
 
 ## 4. Décodage des défauts (registre 100, 32 bits)
 

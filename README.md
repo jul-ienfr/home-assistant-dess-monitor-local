@@ -61,12 +61,13 @@ DE/RE.
 
 ### Commandes
 
-- **Select** : mode de sortie, priorité de sortie, plage d'entrée, buzzer,
-  rétroéclairage, priorité de charge, mode de démarrage, type de batterie.
+- **Select** : mode de sortie (Single uniquement), priorité de sortie, plage
+  d'entrée, buzzer, rétroéclairage, tension et fréquence de sortie, priorité de
+  charge, mode de démarrage, type de batterie.
 - **Switch** : LCD auto home, économie d'énergie, redémarrage sur surcharge ou
-  surchauffe, transfert bypass, égalisation, interrupteur distant.
-- **Number** : tensions de charge/décharge, OVP, courants max, fréquence et
-  tension de sortie, paramètres d'égalisation.
+  surchauffe, transfert bypass, égalisation, sortie distante.
+- **Number** : tensions de charge/décharge, OVP, courants max, paramètres
+  d'égalisation, seuils SOC (retour réseau, retour batterie, coupure basse).
 - **Button** : sortie de l'état défaut (registre 426).
 
 ### Diagnostic
@@ -74,6 +75,8 @@ DE/RE.
 - Mode de fonctionnement lisible (registre 201).
 - Code de défaut et code d'avertissement bruts (32 bits) + libellés.
 - Statut Modbus, compteur d'erreurs, uptime, signal WiFi, appareil en ligne.
+- `Configuration Incoherent` : détecte les combinaisons dangereuses entre OVP,
+  tensions de charge, seuils SOC et courants max.
 - `safe_mode` avec retour arrière après 5 échecs de démarrage.
 
 ### Énergie et autonomie
@@ -188,7 +191,7 @@ WIRING.md                    # câblage RS232 / RS485
 PROTOCOL.md                  # carte de registres SMG-II
 REMOTE_ACCESS.md             # contrôle sans ESP32 (comparaison des voies)
 EYBOND_LOCAL.md              # contrôle via le dongle Wi-Fi d'origine
-tools/                       # diagnostic Eybond en lecture seule
+tools/                       # diagnostic et audit Eybond (lecture + écritures sûres)
 patches/                     # correctif optionnel pour DESS Monitor Local beta.3
 legacy/                      # anciennes configurations (avertissement)
 specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickstart
