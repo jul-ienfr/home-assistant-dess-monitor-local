@@ -117,8 +117,11 @@ the telemetry:
   over-temperature auto restart, overload transfer to bypass, battery
   equalization, remote output enable.
 - **Numbers** — battery OVP, bulk/float/recovery/low-cut-off voltages,
-  max charge current, equalization voltage/time/timeout/interval, and the
-  three SOC thresholds (low cut-off, back to utility, back to battery).
+  max charge current (the SMG-II total for solar + mains; it must stay at
+  or above the max mains current), equalization voltage/time/timeout/
+  interval, and the three SOC thresholds (low cut-off, back to utility,
+  back to battery). To lower the total below the current mains limit, lower
+  the mains limit first.
 - **Diagnostic** — *Configuration incoherent* turns on when the battery
   voltage order or SOC order is impossible, or when a current setting
   exceeds the model limit.
@@ -142,7 +145,7 @@ HACS is built into Home Assistant 2026.11 as the **Marketplace**. The old
    `https://github.com/jul-ienfr/home-assistant-dess-monitor-local` and add
    it. Choose **Integration** if the type is requested.
 4. Open the repository, select **Install**, and choose the version
-   `v1.1.0-beta.4-anenji.2`.
+   `v1.1.0-beta.4-anenji.3`.
 5. The integration has a config flow and loads immediately. If a restart is
    requested, restart Home Assistant, then add it under
    **Settings → Devices & services**.

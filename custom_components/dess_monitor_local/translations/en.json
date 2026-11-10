@@ -567,7 +567,7 @@
         "name": "Low DC cut-off (off-grid)"
       },
       "smg2_max_charge_current": {
-        "name": "Max charging current"
+        "name": "Max charging current (solar + mains)"
       },
       "smg2_equalization_voltage": {
         "name": "Equalization voltage"

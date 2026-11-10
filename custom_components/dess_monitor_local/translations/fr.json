@@ -567,7 +567,7 @@
         "name": "Coupure basse DC (hors réseau)"
       },
       "smg2_max_charge_current": {
-        "name": "Courant de charge max"
+        "name": "Courant de charge max (solaire + réseau)"
       },
       "smg2_equalization_voltage": {
         "name": "Tension d'égalisation"

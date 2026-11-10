@@ -15,7 +15,7 @@ sur le dongle du site : PN complet extrait, écriture FC16 de SUB acceptée
 
 Une version déjà corrigée est publiée dans le dépôt
 [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-sur la branche `main` (release `v1.1.0-beta.4-anenji.2`). Elle contient ce
+sur la branche `main` (release `v1.1.0-beta.4-anenji.3`). Elle contient ce
 correctif SUB / PN complet, plus le SOC et la puissance apparente réels, la
 gestion des NAK, le démarrage non bloquant et les entités vSoC résolues par
 registre. La branche `main` contient aussi le projet ESPHome Anenji. Le patch

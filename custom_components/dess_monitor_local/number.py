@@ -29,6 +29,7 @@ from custom_components.dess_monitor_local.hub import InverterDevice
 from custom_components.dess_monitor_local.smg2_settings import (
     SMG2_MAX_CHARGE_CURRENT,
     async_write_smg2_register,
+    min_total_charge_current,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -498,6 +499,19 @@ class SMG2ConfigNumber(NumberBase):
         return self.data.get("qpiri") or {}
 
     @property
+    def native_min_value(self) -> float:
+        """Return the lower bound accepted by the inverter.
+
+        Register 332 is the total solar + mains charging current, and the
+        SMG-II firmware requires it to be at least register 333 (max mains
+        charging current). Without this dynamic bound the UI would let the
+        user pick a value the firmware rejects with Modbus exception 03.
+        """
+        if getattr(self, "_key", None) == "max_charge_current":
+            return min_total_charge_current(self._qpiri)
+        return self._attr_native_min_value
+
+    @property
     def native_value(self):
         if self._pending_value is not None:
             return self._pending_value
@@ -516,14 +530,23 @@ class SMG2ConfigNumber(NumberBase):
         self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
-        if value < self._attr_native_min_value or value > self._attr_native_max_value:
+        if value < self.native_min_value or value > self._attr_native_max_value:
             _LOGGER.warning(
                 "SMG-II setting %s rejected %s: outside %s..%s",
                 self._key,
                 value,
-                self._attr_native_min_value,
+                self.native_min_value,
                 self._attr_native_max_value,
             )
+            if (
+                self._key == "max_charge_current"
+                and value < self.native_min_value
+            ):
+                _LOGGER.warning(
+                    "Lower the max mains charging current (register 333) "
+                    "to %s A or less before lowering the total limit",
+                    value,
+                )
             return
         register_value = int(round(value * self._scale))
         register_value = max(0, min(0xFFFF, register_value))

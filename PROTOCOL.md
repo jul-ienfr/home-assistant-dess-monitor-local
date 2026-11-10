@@ -107,7 +107,7 @@ plages sont celles de la configuration 24 V ; doubler les tensions pour un parc
 | 327 | Low DC Cut-off (mains) | U_WORD | 0,1 | 20-26 V | |
 | 329 | Low DC Cut-off (off-grid) | U_WORD | 0,1 | 20-26 V | |
 | 331 | Charging Priority | U_WORD | 1 | 0-3 | |
-| 332 | Max Charging Current | U_WORD | 0,1 | 0-100 A | maximum réel du modèle 4,2 kW (lu au registre : 100,0 A) |
+| 332 | Max Charging Current | U_WORD | 0,1 | 0-100 A | **total solaire + réseau** ; doit rester ≥ 333 ; maximum réel du modèle 4,2 kW (lu au registre : 100,0 A) |
 | 333 | Max Mains Charging Current | U_WORD | 0,1 | 0-80 A | maximum réel du modèle 4,2 kW (lu au registre : 80,0 A) |
 | 334 | Equalization Voltage | U_WORD | 0,1 | 24-30 V | |
 | 335 | Equalization Time | U_WORD | 1 | 0-900 min | |
@@ -119,6 +119,12 @@ plages sont celles de la configuration 24 V ; doubler les tensions pour un parc
 | 406 | Turn On Mode | U_WORD | 1 | 0-2 | Local+remote, Local only, Remote only |
 | 420 | Remote Output Enable | U_WORD bit0 | 1 | 0-1 | 0 = shutdown, 1 = turn-on |
 | 426 | Exit Fault State | U_WORD | 1 | écrire 1 | bouton ; lecture toujours 0 |
+
+> **Courant de charge max (332)** : le manuel SMG-II le définit comme le
+> **total solaire + réseau** (`max charging current = utility charging
+> current + solar charging current`). Le firmware exige en plus `332 >= 333`.
+> Pour plafonner le solaire à 60 A, baisser d'abord 333 à 60 A ou moins,
+> puis 332 à 60 A. Il n'existe pas de registre « solaire seul ».
 
 ### Validation par le firmware
 
@@ -135,7 +141,7 @@ sont chacune dans leur plage mais incoherentes. Le diagnostic
 `Configuration Incoherent` vérifie en continu :
 
 - `323 > 324 > 325 > 326 > 327` ;
-- `332 <= 100 A` et `333 <= 80 A` ;
+- `332 <= 100 A`, `333 <= 80 A` et `332 >= 333` ;
 - `343 < 341 < 342` et `342 >= 60 %`.
 
 ### Écritures vérifiées sur l'appareil

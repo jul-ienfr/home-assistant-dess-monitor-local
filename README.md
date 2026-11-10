@@ -242,7 +242,7 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
   — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
 - [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
   — beta.4 avec SUB, PN complet et SOC réel, intégré sur `main`
-  (release `v1.1.0-beta.4-anenji.2`).
+  (release `v1.1.0-beta.4-anenji.3`).
 - [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
 
 ## Licence

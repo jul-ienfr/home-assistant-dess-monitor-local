@@ -28,6 +28,25 @@ class TestUtilityCurrentOptions:
         )[-1] == "80"
 
 
+class TestTotalChargeCurrentFloor:
+    def test_floor_follows_max_mains_current(self):
+        assert smg2_settings.min_total_charge_current(
+            {"max_utility_charging_current": "80"}
+        ) == 80.0
+        assert smg2_settings.min_total_charge_current(
+            {"max_utility_charging_current": "60.0"}
+        ) == 60.0
+
+    def test_floor_is_zero_without_usable_data(self):
+        assert smg2_settings.min_total_charge_current({}) == 0.0
+        assert smg2_settings.min_total_charge_current(
+            {"max_utility_charging_current": "n/a"}
+        ) == 0.0
+        assert smg2_settings.min_total_charge_current(
+            {"max_utility_charging_current": None}
+        ) == 0.0
+
+
 class TestSnapshotConfig:
     def _read(self, block_300, block_400=None):
         async def read_block(start, count):

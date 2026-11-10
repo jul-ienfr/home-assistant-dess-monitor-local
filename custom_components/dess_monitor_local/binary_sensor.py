@@ -45,6 +45,7 @@ from custom_components.dess_monitor_local.smg2_faults import (
 from custom_components.dess_monitor_local.smg2_settings import (
     SMG2_MAX_CHARGE_CURRENT,
     SMG2_MAX_UTILITY_CHARGE_CURRENT,
+    min_total_charge_current,
     ui_language,
 )
 
@@ -422,6 +423,16 @@ _PROBLEM_TEXT = {
         "en": "Max mains charging current exceeds 80 A.",
         "fr": "Le courant de charge secteur max dépasse 80 A.",
     },
+    "max_charge_below_mains": {
+        "en": (
+            "Total charging current must be at least the max mains "
+            "charging current."
+        ),
+        "fr": (
+            "Le courant de charge total doit être au moins égal au courant "
+            "de charge secteur max."
+        ),
+    },
 }
 
 
@@ -495,6 +506,9 @@ class SMG2ConfigurationCoherenceSensor(CoordinatorEntity, BinarySensorEntity):
             violations.append("max_charge_current")
         if max_mains is not None and max_mains > SMG2_MAX_UTILITY_CHARGE_CURRENT:
             violations.append("max_utility_current")
+        min_total = min_total_charge_current(qpiri)
+        if max_charge is not None and min_total > 0 and max_charge < min_total:
+            violations.append("max_charge_below_mains")
 
         language = ui_language(getattr(self, "hass", None))
         attrs = {

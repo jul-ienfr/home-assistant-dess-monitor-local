@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.3 — 2026-11-10
+
+### Changed
+
+- **The maximum charging current control is now explicitly the total
+  solar + mains limit, and it can no longer be set below the max mains
+  charging current.** The SMG-II manual defines program 02 as
+  `max charging current = utility charging current + solar charging current`
+  and the firmware rejects a total lower than program 11 (register 333).
+  The number entity is renamed *Max charging current (solar + mains)* /
+  *Courant de charge max (solaire + réseau)*, and its slider minimum follows
+  the current mains limit. To lower the total/solar charge cap to 60 A,
+  first lower the max mains charging current to 60 A or less, then set the
+  total to 60 A. The configuration-coherence sensor now also flags a total
+  lower than the mains limit.
+
+### Notes
+
+- Restart Home Assistant after installing this release so the renamed
+  entity and the new dynamic minimum are loaded.
+
 ## 1.1.0-beta.4-anenji.2 — 2026-11-10
 
 ### Fixed

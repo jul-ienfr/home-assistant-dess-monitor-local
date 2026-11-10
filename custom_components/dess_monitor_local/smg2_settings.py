@@ -38,6 +38,24 @@ def max_utility_charging_current_options(qpiri: dict | None) -> list[str]:
     return options or [str(UTILITY_CURRENT_STEPS[1])]
 
 
+def min_total_charge_current(qpiri: dict | None) -> float:
+    """Return the firmware's lower bound for the total charge current.
+
+    SMG-II program 02 (register 332) is the *total* charging current, not a
+    solar-only limit: the manual states
+    ``max charging current = utility charging current + solar charging current``.
+    The firmware also refuses a total lower than program 11 (register 333),
+    the maximum mains charging current. Expose that bound so the number
+    entity cannot send a value the inverter will reject.
+    """
+    raw = (qpiri or {}).get("max_utility_charging_current")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, value)
+
+
 def ui_language(hass) -> str:
     """Return the HA UI language, defaulting to English."""
     language = getattr(getattr(hass, "config", None), "language", None) or "en"
