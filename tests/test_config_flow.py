@@ -17,11 +17,15 @@ from unittest.mock import patch  # noqa: E402
 from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
 
 # CONF_DEVICE is asserted in the device happy-path.
+from custom_components.dess_monitor_local.config_flow import _parse_device_uri  # noqa: E402
 from custom_components.dess_monitor_local.const import (  # noqa: E402
     CONF_DEVICE,  # noqa: E402
     CONF_ENTRY_KIND,
+    CONF_EYBOND_ANNOUNCE_IP,
     CONF_EYBOND_BIND_HOST,
     CONF_EYBOND_BIND_PORT,
+    CONF_EYBOND_BROADCAST,
+    CONF_EYBOND_DEVADDR,
     CONF_HOST,
     CONF_NAME,
     CONF_PORT,
@@ -30,7 +34,9 @@ from custom_components.dess_monitor_local.const import (  # noqa: E402
     CONF_UPDATE_INTERVAL,
     DOMAIN,
     ENTRY_KIND_EYBOND_HUB,
+    PROTOCOL_MODBUS,
     PROTOCOL_VOLTRONIC,
+    TRANSPORT_EYBOND,
     TRANSPORT_TCP_ELFIN,
 )
 
@@ -91,6 +97,64 @@ async def test_full_flow_voltronic_tcp_elfin(hass, enable_custom_integrations):
     assert result["options"][CONF_DEVICE] == "tcp://192.168.1.50:8899"
     assert result["options"][CONF_PROTOCOL] == PROTOCOL_VOLTRONIC
     assert result["options"][CONF_TRANSPORT] == TRANSPORT_TCP_ELFIN
+
+
+@pytest.mark.asyncio
+async def test_full_flow_modbus_eybond(hass, enable_custom_integrations):
+    """Modbus over an EyBond dongle must store an eybond-modbus URI.
+
+    Regression: the single-device flow used to fall back to ``modbus://``
+    whenever the protocol was Modbus, ignoring the selected transport and
+    opening a TCP client against the listener host instead of the dongle.
+    """
+    with patch(
+        "custom_components.dess_monitor_local.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await _pick(hass, result["flow_id"], "device")
+        result = await _advance(hass, result["flow_id"], {CONF_NAME: "Dongle"})
+        result = await _advance(
+            hass, result["flow_id"], {CONF_PROTOCOL: PROTOCOL_MODBUS}
+        )
+        result = await _advance(
+            hass, result["flow_id"], {CONF_TRANSPORT: TRANSPORT_EYBOND}
+        )
+        result = await _advance(
+            hass,
+            result["flow_id"],
+            {
+                CONF_HOST: "0.0.0.0",
+                CONF_PORT: 8899,
+                CONF_EYBOND_DEVADDR: 1,
+                CONF_EYBOND_BROADCAST: "192.168.71.255",
+                CONF_EYBOND_ANNOUNCE_IP: "192.168.68.60",
+                CONF_UPDATE_INTERVAL: 10,
+            },
+        )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["options"][CONF_DEVICE] == (
+        "eybond-modbus://0.0.0.0:8899/1"
+        "?broadcast=192.168.71.255&announce=192.168.68.60"
+    )
+    assert result["options"][CONF_PROTOCOL] == PROTOCOL_MODBUS
+    assert result["options"][CONF_TRANSPORT] == TRANSPORT_EYBOND
+
+
+def test_parse_device_uri_recovers_modbus_eybond():
+    parsed = _parse_device_uri(
+        "eybond-modbus://0.0.0.0:8899/7"
+        "?broadcast=192.168.71.255&announce=192.168.68.60"
+    )
+    assert parsed[CONF_PROTOCOL] == PROTOCOL_MODBUS
+    assert parsed[CONF_TRANSPORT] == TRANSPORT_EYBOND
+    assert parsed[CONF_HOST] == "0.0.0.0"
+    assert parsed[CONF_PORT] == 8899
+    assert parsed[CONF_EYBOND_DEVADDR] == 7
+    assert parsed[CONF_EYBOND_BROADCAST] == "192.168.71.255"
+    assert parsed[CONF_EYBOND_ANNOUNCE_IP] == "192.168.68.60"
 
 
 @pytest.mark.asyncio

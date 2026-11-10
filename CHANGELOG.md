@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Single-device Modbus over an EyBond dongle now polls the inverter.**
+  Selecting protocol `modbus` and transport `eybond` in the device wizard
+  used to store `modbus://0.0.0.0:8899` and open a Modbus TCP client against
+  the listener itself. The wizard now builds
+  `eybond-modbus://0.0.0.0:8899/<devaddr>?broadcast=…&announce=…`, the URI
+  the Eybond adapter already supported. The options flow also recovers the
+  protocol/transport correctly when editing such an entry.
+
 ### Documentation
 
 - Everything now lives on `main`, including `hacs.json` and

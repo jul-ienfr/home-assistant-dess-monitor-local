@@ -134,7 +134,7 @@ integration card.
 | --- | --- | --- |
 | `voltronic` | Voltronic / Axpert PI30 | `tcp_elfin`, `serial`, `eybond` |
 | `pi18` | PI18 / InfiniSolar-V | `tcp`, `serial` |
-| `modbus` | Modbus RTU (SMG-II) | `tcp`, `eybond-modbus` |
+| `modbus` | Modbus RTU (SMG-II) | `tcp`, `eybond` |
 | `agent` | Local [`solar-system-agent`] HTTP API | `agent_http` |
 
 Common option for all protocols:
@@ -142,10 +142,14 @@ Common option for all protocols:
 - **Update interval** — how often Home Assistant polls the device, `1`–`300` s
   (default `10`).
 
-For SMG-II through an Eybond hub, enable the child and assign the `modbus`
-protocol in the hub's discovered-device options. The hub creates the
-`eybond-modbus://` URI automatically; the `devaddr` is the Modbus unit ID
-(usually `1`).
+For a single SMG-II behind an EyBond dongle, choose protocol `modbus`,
+transport `eybond`, bind `0.0.0.0:8899`, and the RS485 address (usually `1`).
+The wizard creates the `eybond-modbus://` URI automatically. The `devaddr`
+is the Modbus unit ID. Set the broadcast address of the dongle's subnet and
+the LAN IP the dongle should call back to.
+
+For several dongles, use an Eybond hub and enable each discovered child with
+the `modbus` protocol; the hub adds the dongle PN to every child URI.
 
 For protocol-specific notes and the internal device URI format see the
 [upstream configuration wiki](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/wiki).
