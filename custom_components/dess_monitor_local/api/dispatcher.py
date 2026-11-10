@@ -104,3 +104,10 @@ async def set_max_utility_charge_current(
 ) -> dict:
     adapter = get_adapter(device)
     return await adapter.set_max_utility_charge_current(amps, float_format)
+
+async def set_register(
+    device: str, address: int, value: int, timeout: float = 30.0
+) -> dict:
+    """Write one raw holding register (SMG-II Modbus only)."""
+    adapter = get_adapter(device, timeout)
+    return await adapter.set_register(address, value)

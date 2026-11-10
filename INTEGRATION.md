@@ -100,10 +100,34 @@ language. English and French are bundled; any other language falls back to
 English. Changing the Home Assistant language picks up the new names after
 the integration reloads (or after a restart).
 
-Utility charging current is capped at the SMG-II maximum of **100 A**
+Utility charging current is capped at the 4.2 kW SMG-II maximum of **80 A**
 (register 333); if the inverter reports a lower total charge limit, that
 lower value is offered instead. The applied cap is exposed as
 `max_allowed_amps`.
+
+### Full inverter control from Home Assistant
+
+Modbus/SMG-II entries expose the complete writable register set, not just
+the telemetry:
+
+- **Selects** — input voltage range (wide/UPS), buzzer mode, LCD
+  backlight, output voltage (220/230/240 V), output frequency (50/60 Hz),
+  inverter battery type, turn-on mode.
+- **Switches** — LCD auto home, energy saving, overload auto restart,
+  over-temperature auto restart, overload transfer to bypass, battery
+  equalization, remote output enable.
+- **Numbers** — battery OVP, bulk/float/recovery/low-cut-off voltages,
+  max charge current, equalization voltage/time/timeout/interval, and the
+  three SOC thresholds (low cut-off, back to utility, back to battery).
+- **Diagnostic** — *Configuration incoherent* turns on when the battery
+  voltage order or SOC order is impossible, or when a current setting
+  exceeds the model limit.
+
+Every setting is a normal Home Assistant entity, so it can be dashboarded,
+automated, logged, and renamed like the sensors. The optional ESPHome web
+UI is no longer required for daily operation; the integration polls the
+SMG-II directly over Modbus or the Eybond dongle. Do not run two Modbus
+masters on the same inverter port.
 
 ## Installation
 

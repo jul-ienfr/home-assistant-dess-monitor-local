@@ -20,6 +20,16 @@
   binary sensor.
 - **Charge source priority now offers "Solar only" (`PCP03`).** SMG-II
   register 331 value 3 was readable but not writable before.
+- **Every writable SMG-II setting is now available in Home Assistant.**
+  Modbus entries expose selects (input voltage range, buzzer, LCD
+  backlight, output voltage/frequency, battery type, turn-on mode),
+  switches (LCD auto home, energy saving, overload/over-temperature
+  restart, overload bypass, battery equalization, remote output) and
+  numbers (battery OVP, bulk/float/recovery/cut-off voltages, max charge
+  current, equalization voltage/time/timeout/interval, SOC thresholds).
+  A diagnostic **Configuration incoherent** sensor flags invalid
+  threshold combinations. The optional ESPHome web UI is no longer needed
+  for daily operation.
 
 ### Changed
 
@@ -37,9 +47,9 @@
 ### Fixed
 
 - **Utility charging current can no longer be set to 110 A or 120 A.**
-  SMG-II register 333 is documented up to 100 A. The select now caps its
-  options at 100 A, or lower when register 332 reports a lower total
-  charge limit, and exposes the cap as `max_allowed_amps`.
+  The 4.2 kW SMG-II rates register 333 at 80 A, not 100 A. The select now
+  caps its options at 80 A, or lower when register 332 reports a lower
+  total charge limit, and exposes the cap as `max_allowed_amps`.
 - **Single-device Modbus over an EyBond dongle now polls the inverter.**
   Selecting protocol `modbus` and transport `eybond` in the device wizard
   used to store `modbus://0.0.0.0:8899` and open a Modbus TCP client against

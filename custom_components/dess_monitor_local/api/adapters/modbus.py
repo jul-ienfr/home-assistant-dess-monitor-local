@@ -225,3 +225,7 @@ class ModbusAdapter(BaseAdapter):
 
     async def set_max_utility_charge_current(self, amps: int, float_format: bool = False) -> dict:
         return await self._transport().write_register(333, int(amps * 10))
+
+    async def set_register(self, address: int, value: int) -> dict:
+        """Write any SMG-II holding register (config entities)."""
+        return await self._transport().write_register(address, int(value))

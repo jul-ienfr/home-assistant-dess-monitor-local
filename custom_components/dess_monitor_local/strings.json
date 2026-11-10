@@ -492,6 +492,9 @@
       },
       "direct_any_warning": {
         "name": "Any Warning"
+      },
+      "smg2_configuration_incoherent": {
+        "name": "Configuration incoherent"
       }
     },
     "select": {
@@ -506,6 +509,27 @@
       },
       "max_utility_charging_current": {
         "name": "Max utility charging current"
+      },
+      "smg2_input_voltage_range": {
+        "name": "Input voltage range"
+      },
+      "smg2_buzzer_mode": {
+        "name": "Buzzer mode"
+      },
+      "smg2_lcd_backlight": {
+        "name": "LCD backlight"
+      },
+      "smg2_output_voltage": {
+        "name": "Output voltage setting"
+      },
+      "smg2_output_frequency": {
+        "name": "Output frequency setting"
+      },
+      "smg2_battery_type": {
+        "name": "Inverter battery type"
+      },
+      "smg2_turn_on_mode": {
+        "name": "Turn-on mode"
       }
     },
     "number": {
@@ -523,11 +547,74 @@
       },
       "float_noise_floor": {
         "name": "Float noise floor"
+      },
+      "smg2_battery_ovp": {
+        "name": "Battery over-voltage protection"
+      },
+      "smg2_max_charge_voltage": {
+        "name": "Max charging voltage"
+      },
+      "smg2_float_charge_voltage": {
+        "name": "Float charging voltage"
+      },
+      "smg2_battery_recovery_voltage": {
+        "name": "Battery recovery voltage (mains)"
+      },
+      "smg2_battery_low_cutoff_mains": {
+        "name": "Low DC cut-off (mains)"
+      },
+      "smg2_battery_low_cutoff_offgrid": {
+        "name": "Low DC cut-off (off-grid)"
+      },
+      "smg2_max_charge_current": {
+        "name": "Max charging current"
+      },
+      "smg2_equalization_voltage": {
+        "name": "Equalization voltage"
+      },
+      "smg2_equalization_time": {
+        "name": "Equalization time"
+      },
+      "smg2_equalization_timeout": {
+        "name": "Equalization timeout"
+      },
+      "smg2_equalization_interval": {
+        "name": "Equalization interval"
+      },
+      "smg2_soc_back_to_utility": {
+        "name": "SOC back to utility"
+      },
+      "smg2_soc_back_to_battery": {
+        "name": "SOC back to battery"
+      },
+      "smg2_soc_low_cutoff": {
+        "name": "Low DC cut-off SOC"
       }
     },
     "switch": {
       "float_deadband": {
         "name": "Float deadband"
+      },
+      "smg2_lcd_auto_return": {
+        "name": "LCD auto home"
+      },
+      "smg2_energy_saving": {
+        "name": "Energy saving mode"
+      },
+      "smg2_overload_auto_restart": {
+        "name": "Overload auto restart"
+      },
+      "smg2_overtemp_auto_restart": {
+        "name": "Over-temperature auto restart"
+      },
+      "smg2_overload_bypass": {
+        "name": "Overload transfer to bypass"
+      },
+      "smg2_battery_equalization": {
+        "name": "Battery equalization"
+      },
+      "smg2_remote_output": {
+        "name": "Remote output enable"
       }
     },
     "button": {

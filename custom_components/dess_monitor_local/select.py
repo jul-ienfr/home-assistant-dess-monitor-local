@@ -19,9 +19,20 @@ from custom_components.dess_monitor_local.api.commands.direct_commands import (
     set_max_utility_charge_current,
     set_output_source_priority,
 )
-from custom_components.dess_monitor_local.const import DOMAIN
+from custom_components.dess_monitor_local.const import (
+    CONF_PROTOCOL,
+    DOMAIN,
+    PROTOCOL_MODBUS,
+)
 from custom_components.dess_monitor_local.coordinators.direct_coordinator import DirectCoordinator
 from custom_components.dess_monitor_local.hub import InverterDevice
+from custom_components.dess_monitor_local.smg2_settings import (
+    async_write_smg2_register,
+    max_utility_charging_current_options,
+)
+from custom_components.dess_monitor_local.smg2_settings import (
+    ui_language as _ui_language,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,12 +40,6 @@ BATTERY_MODE_LI_VOLTAGE = "Lithium (Voltage)"
 BATTERY_MODE_LI_BMS = "Lithium (BMS)"
 BATTERY_MODE_LEAD_ACID = "Lead-acid"
 BATTERY_MODES = (BATTERY_MODE_LI_VOLTAGE, BATTERY_MODE_LI_BMS, BATTERY_MODE_LEAD_ACID)
-
-
-def _ui_language(hass) -> str:
-    """Return the HA UI language, defaulting to English."""
-    language = getattr(getattr(hass, "config", None), "language", None) or "en"
-    return "fr" if str(language).lower().startswith("fr") else "en"
 
 
 # (stable raw value, labels, description)
@@ -169,27 +174,169 @@ _CHARGE_SOURCE_CHOICES: tuple[
     ),
 )
 
-_UTILITY_CURRENT_STEPS = (2, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+# Writable SMG-II configuration selects. The raw value in ``raw_value`` is
+# the exact register value; the visible labels follow the HA UI language.
+_SMG2_SELECT_SPECS: tuple[dict, ...] = (
+    {
+        "key": "input_voltage_range",
+        "address": 302,
+        "data_key": "input_voltage_range_code",
+        "icon": "mdi:sine-wave",
+        "choices": (
+            (
+                0,
+                {"en": "Wide (appliance)", "fr": "Large (appareil)"},
+                {
+                    "en": "Accepts a wider, less stable grid voltage range.",
+                    "fr": "Accepte une plage de tension réseau plus large et moins stable.",
+                },
+            ),
+            (
+                1,
+                {"en": "Narrow (UPS)", "fr": "Étroit (UPS)"},
+                {
+                    "en": "Narrow, UPS-like input range for a stable grid.",
+                    "fr": "Plage d'entrée étroite de type UPS, pour un réseau stable.",
+                },
+            ),
+        ),
+    },
+    {
+        "key": "buzzer_mode",
+        "address": 303,
+        "data_key": "buzzer_mode",
+        "icon": "mdi:bell",
+        "choices": (
+            (
+                0,
+                {"en": "Silent", "fr": "Silencieux"},
+                {"en": "No buzzer.", "fr": "Aucun signal sonore."},
+            ),
+            (
+                1,
+                {
+                    "en": "Input changes + warnings + faults",
+                    "fr": "Changements d'entrée + alertes + défauts",
+                },
+                {
+                    "en": "Beeps on input changes, warnings and faults.",
+                    "fr": "Bip sur changement d'entrée, alertes et défauts.",
+                },
+            ),
+            (
+                2,
+                {"en": "Warnings + faults", "fr": "Alertes + défauts"},
+                {
+                    "en": "Beeps on warnings and faults only.",
+                    "fr": "Bip uniquement sur alertes et défauts.",
+                },
+            ),
+            (
+                3,
+                {"en": "Faults only", "fr": "Défauts uniquement"},
+                {"en": "Beeps only on faults.", "fr": "Bip uniquement sur défauts."},
+            ),
+        ),
+    },
+    {
+        "key": "lcd_backlight",
+        "address": 305,
+        "data_key": "lcd_backlight",
+        "icon": "mdi:lightbulb",
+        "choices": (
+            (
+                0,
+                {"en": "Timed off", "fr": "Extinction temporisée"},
+                {
+                    "en": "Backlight turns off after the inactivity delay.",
+                    "fr": "Le rétroéclairage s'éteint après le délai d'inactivité.",
+                },
+            ),
+            (
+                1,
+                {"en": "Always on", "fr": "Toujours allumé"},
+                {
+                    "en": "Backlight stays on.",
+                    "fr": "Le rétroéclairage reste allumé.",
+                },
+            ),
+        ),
+    },
+    {
+        "key": "output_voltage",
+        "address": 320,
+        "data_key": "output_voltage_setting_code",
+        "icon": "mdi:power-plug",
+        "choices": (
+            (2200, {"en": "220 V", "fr": "220 V"}, {}),
+            (2300, {"en": "230 V", "fr": "230 V"}, {}),
+            (2400, {"en": "240 V", "fr": "240 V"}, {}),
+        ),
+    },
+    {
+        "key": "output_frequency",
+        "address": 321,
+        "data_key": "output_frequency_setting_code",
+        "icon": "mdi:sine-wave",
+        "choices": (
+            (5000, {"en": "50 Hz", "fr": "50 Hz"}, {}),
+            (6000, {"en": "60 Hz", "fr": "60 Hz"}, {}),
+        ),
+    },
+    {
+        "key": "battery_type",
+        "address": 322,
+        "data_key": "battery_type_code",
+        "icon": "mdi:battery-sync",
+        "choices": (
+            (0, {"en": "AGM", "fr": "AGM"}, {}),
+            (1, {"en": "Flooded", "fr": "Plomb ouvert"}, {}),
+            (2, {"en": "User", "fr": "Utilisateur"}, {
+                "en": "Custom voltage profile; use the battery voltage settings below.",
+                "fr": "Profil de tension personnalisé ; utilisez les réglages de tension batterie ci-dessous.",
+            }),
+            (3, {"en": "Li1", "fr": "Li1"}, {}),
+            (4, {"en": "Li2", "fr": "Li2"}, {}),
+            (5, {"en": "Li3", "fr": "Li3"}, {}),
+            (6, {"en": "Li4", "fr": "Li4"}, {}),
+            (8, {"en": "Lib", "fr": "Lib"}, {}),
+        ),
+    },
+    {
+        "key": "turn_on_mode",
+        "address": 406,
+        "data_key": "turn_on_mode",
+        "icon": "mdi:power-settings",
+        "choices": (
+            (
+                0,
+                {"en": "Local + remote", "fr": "Local + distant"},
+                {
+                    "en": "The front panel and the remote command both work.",
+                    "fr": "La façade et la commande à distance fonctionnent.",
+                },
+            ),
+            (
+                1,
+                {"en": "Local only", "fr": "Local uniquement"},
+                {
+                    "en": "Only the front panel can turn the inverter on.",
+                    "fr": "Seule la façade peut allumer l'onduleur.",
+                },
+            ),
+            (
+                2,
+                {"en": "Remote only", "fr": "Distant uniquement"},
+                {
+                    "en": "Only the remote command can turn the inverter on.",
+                    "fr": "Seule la commande à distance peut allumer l'onduleur.",
+                },
+            ),
+        ),
+    },
+)
 
 
-def max_utility_charging_current_options(qpiri: dict | None) -> list[str]:
-    """Return valid utility-charge-current steps for this inverter.
-
-    Register 333 is documented up to 100 A; the old hard-coded list
-    offered 110 A and 120 A, which the SMG-II rejects.  When the inverter
-    reports a lower total charge limit (register 332), that lower value
-    is used as the cap instead.
-    """
-    cap = 100
-    raw = (qpiri or {}).get("max_charging_current")
-    try:
-        reported = int(float(raw))
-    except (TypeError, ValueError):
-        reported = 0
-    if reported >= _UTILITY_CURRENT_STEPS[0]:
-        cap = min(cap, reported)
-    options = [str(value) for value in _UTILITY_CURRENT_STEPS if value <= cap]
-    return options or [str(_UTILITY_CURRENT_STEPS[1])]
 
 
 #
@@ -205,6 +352,7 @@ async def async_setup_entry(
     """Add sensors for passed config_entry in HA."""
     hub = config_entry.runtime_data
     coordinator = hub.direct_coordinator
+    entry_protocol = config_entry.options.get(CONF_PROTOCOL)
 
     new_devices = []
     for item in hub.items:
@@ -212,6 +360,13 @@ async def async_setup_entry(
         new_devices.append(InverterChargeSourcePrioritySelect(item, coordinator))
         new_devices.append(InverterMaxUtilityChargingCurrentNumber(item, coordinator))
         new_devices.append(BatteryModeSelect(item))
+
+        # Raw-register settings only exist on the SMG-II Modbus map. A hub
+        # can mix protocols, so use the per-item protocol when present.
+        item_protocol = getattr(item, "protocol", None) or entry_protocol
+        if item_protocol == PROTOCOL_MODBUS:
+            for spec in _SMG2_SELECT_SPECS:
+                new_devices.append(SMG2ConfigSelect(item, coordinator, **spec))
 
     if new_devices:
         async_add_entities(new_devices)
@@ -560,4 +715,114 @@ class InverterMaxUtilityChargingCurrentNumber(SelectBase):
             self._attr_current_option = option
             self.async_write_ha_state()
             self.coordinator.force_section("qpiri")
+        await self.coordinator.async_request_refresh()
+
+
+class SMG2ConfigSelect(SelectBase):
+    """Writable SMG-II register exposed as a translated select.
+
+    ``data_key`` points at the QPIRI projection, ``address`` at the actual
+    holding register. The raw register value is exposed as ``raw_value``
+    so automations do not depend on the visible label.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        inverter_device: InverterDevice,
+        coordinator: DirectCoordinator,
+        *,
+        key: str,
+        address: int,
+        data_key: str,
+        icon: str,
+        choices: tuple,
+    ):
+        super().__init__(inverter_device, coordinator)
+        self._key = key
+        self._address = address
+        self._data_key = data_key
+        self._choices = choices
+        self._pending_raw: int | None = None
+        self._attr_unique_id = f"{self._inverter_device.inverter_id}_smg2_{key}"
+        self._attr_translation_key = f"smg2_{key}"
+        self._attr_icon = icon
+
+    @property
+    def _qpiri(self) -> dict:
+        return self.data.get("qpiri") or {}
+
+    def _raw(self) -> int | None:
+        if self._pending_raw is not None:
+            return self._pending_raw
+        raw = self._qpiri.get(self._data_key)
+        try:
+            return int(round(float(raw)))
+        except (TypeError, ValueError):
+            return None
+
+    def _label(self, value: int, language: str) -> str | None:
+        for choice_value, labels, _description in self._choices:
+            if choice_value == value:
+                return labels[language]
+        return None
+
+    @property
+    def options(self) -> list[str]:
+        language = _ui_language(self.hass)
+        return [labels[language] for _value, labels, _desc in self._choices]
+
+    @property
+    def current_option(self) -> str | None:
+        raw = self._raw()
+        if raw is None:
+            return None
+        return self._label(raw, _ui_language(self.hass))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        raw = self._raw()
+        if raw is None:
+            return {}
+        language = _ui_language(self.hass)
+        for value, _labels, descriptions in self._choices:
+            if value == raw:
+                attrs = {"raw_value": raw}
+                if descriptions:
+                    attrs["description"] = descriptions[language]
+                return attrs
+        return {"raw_value": raw}
+
+    def _raw_for_option(self, option: str) -> int | None:
+        for value, labels, _description in self._choices:
+            if option == str(value) or option in labels.values():
+                return value
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._pending_raw = None
+        self.async_write_ha_state()
+
+    async def async_select_option(self, option: str) -> None:
+        raw = self._raw_for_option(option)
+        if raw is None:
+            return
+        result = await async_write_smg2_register(
+            self.hass,
+            self._inverter_device.device_data,
+            self._address,
+            raw,
+        )
+        if isinstance(result, dict) and result.get("error"):
+            _LOGGER.warning(
+                "SMG-II setting %s write failed for %s: %s",
+                self._key, self._inverter_device.name, result["error"],
+            )
+            return
+        self._pending_raw = raw
+        self.async_write_ha_state()
+        self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()

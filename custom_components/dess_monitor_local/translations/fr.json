@@ -492,6 +492,9 @@
       },
       "direct_any_warning": {
         "name": "Alerte active"
+      },
+      "smg2_configuration_incoherent": {
+        "name": "Configuration incohérente"
       }
     },
     "select": {
@@ -506,6 +509,27 @@
       },
       "max_utility_charging_current": {
         "name": "Courant de charge secteur max"
+      },
+      "smg2_input_voltage_range": {
+        "name": "Plage de tension d'entrée"
+      },
+      "smg2_buzzer_mode": {
+        "name": "Mode du buzzer"
+      },
+      "smg2_lcd_backlight": {
+        "name": "Rétroéclairage LCD"
+      },
+      "smg2_output_voltage": {
+        "name": "Tension de sortie"
+      },
+      "smg2_output_frequency": {
+        "name": "Fréquence de sortie"
+      },
+      "smg2_battery_type": {
+        "name": "Type de batterie (onduleur)"
+      },
+      "smg2_turn_on_mode": {
+        "name": "Mode de mise en marche"
       }
     },
     "number": {
@@ -523,11 +547,74 @@
       },
       "float_noise_floor": {
         "name": "Seuil de bruit flottant"
+      },
+      "smg2_battery_ovp": {
+        "name": "Protection surtension batterie"
+      },
+      "smg2_max_charge_voltage": {
+        "name": "Tension de charge max"
+      },
+      "smg2_float_charge_voltage": {
+        "name": "Tension de floating"
+      },
+      "smg2_battery_recovery_voltage": {
+        "name": "Tension de reprise batterie (réseau)"
+      },
+      "smg2_battery_low_cutoff_mains": {
+        "name": "Coupure basse DC (réseau)"
+      },
+      "smg2_battery_low_cutoff_offgrid": {
+        "name": "Coupure basse DC (hors réseau)"
+      },
+      "smg2_max_charge_current": {
+        "name": "Courant de charge max"
+      },
+      "smg2_equalization_voltage": {
+        "name": "Tension d'égalisation"
+      },
+      "smg2_equalization_time": {
+        "name": "Durée d'égalisation"
+      },
+      "smg2_equalization_timeout": {
+        "name": "Délai d'égalisation"
+      },
+      "smg2_equalization_interval": {
+        "name": "Intervalle d'égalisation"
+      },
+      "smg2_soc_back_to_utility": {
+        "name": "SOC retour au réseau"
+      },
+      "smg2_soc_back_to_battery": {
+        "name": "SOC retour batterie"
+      },
+      "smg2_soc_low_cutoff": {
+        "name": "SOC de coupure basse"
       }
     },
     "switch": {
       "float_deadband": {
         "name": "Zone morte flottante"
+      },
+      "smg2_lcd_auto_return": {
+        "name": "Retour auto à l'accueil"
+      },
+      "smg2_energy_saving": {
+        "name": "Mode économie d'énergie"
+      },
+      "smg2_overload_auto_restart": {
+        "name": "Redémarrage auto après surcharge"
+      },
+      "smg2_overtemp_auto_restart": {
+        "name": "Redémarrage auto après surchauffe"
+      },
+      "smg2_overload_bypass": {
+        "name": "Transfert surcharge vers bypass"
+      },
+      "smg2_battery_equalization": {
+        "name": "Égalisation de la batterie"
+      },
+      "smg2_remote_output": {
+        "name": "Activation sortie à distance"
       }
     },
     "button": {

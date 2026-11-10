@@ -17,6 +17,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -40,6 +41,11 @@ from custom_components.dess_monitor_local.smg2_faults import (
     fault_label,
     normalize_language,
     warning_label,
+)
+from custom_components.dess_monitor_local.smg2_settings import (
+    SMG2_MAX_CHARGE_CURRENT,
+    SMG2_MAX_UTILITY_CHARGE_CURRENT,
+    ui_language,
 )
 
 
@@ -112,6 +118,11 @@ async def async_setup_entry(
         # Aggregate warning sensor works for every protocol: SMG-II feeds
         # fault_code/warning_code through the QPIWS/QFWS projections.
         new_entities.append(_AnyWarningBinarySensor(item, coordinator))
+
+        if is_modbus:
+            new_entities.append(
+                SMG2ConfigurationCoherenceSensor(item, coordinator)
+            )
 
         if not is_modbus:
             # The per-bit QPIWS/QFWS flags are not decoded for SMG-II (the
@@ -376,3 +387,139 @@ class _AnyWarningBinarySensor(CoordinatorEntity, BinarySensorEntity):
         )
         self._attr_is_on = any_set
         self.async_write_ha_state()
+
+
+_PROBLEM_TEXT = {
+    "battery_voltage_order": {
+        "en": (
+            "Battery thresholds must satisfy OVP > bulk > float > "
+            "recovery > low cut-off."
+        ),
+        "fr": (
+            "Les seuils batterie doivent respecter OVP > bulk > float > "
+            "reprise > coupure basse."
+        ),
+    },
+    "soc_order": {
+        "en": (
+            "SOC thresholds must satisfy low cut-off < back to utility "
+            "< back to battery."
+        ),
+        "fr": (
+            "Les seuils SOC doivent respecter coupure basse < retour réseau "
+            "< retour batterie."
+        ),
+    },
+    "soc_back_to_battery_min": {
+        "en": "Back-to-battery SOC must be at least 60 %.",
+        "fr": "Le SOC de retour batterie doit être au moins 60 %.",
+    },
+    "max_charge_current": {
+        "en": "Max charging current exceeds 100 A.",
+        "fr": "Le courant de charge max dépasse 100 A.",
+    },
+    "max_utility_current": {
+        "en": "Max mains charging current exceeds 80 A.",
+        "fr": "Le courant de charge secteur max dépasse 80 A.",
+    },
+}
+
+
+class SMG2ConfigurationCoherenceSensor(CoordinatorEntity, BinarySensorEntity):
+    """Diagnostic: are the interdependent SMG-II thresholds consistent?
+
+    The individual number entities enforce their own min/max, but they
+    cannot prevent a physically incoherent combination such as OVP 28 V
+    with a 30 V bulk target. This sensor mirrors the ESPHome interlock and
+    lists every violated rule in ``violations``.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "smg2_configuration_incoherent"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
+        super().__init__(coordinator)
+        self._inverter_device = inverter_device
+        self._attr_unique_id = (
+            f"{inverter_device.inverter_id}_smg2_configuration_incoherent"
+        )
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, inverter_device.inverter_id)},
+            name=inverter_device.name,
+            manufacturer="ESS",
+            model=inverter_device.inverter_id,
+            sw_version=inverter_device.firmware_version,
+        )
+
+    def _qpiri(self) -> dict:
+        return (self.coordinator.data or {}).get(
+            self._inverter_device.inverter_id, {}
+        ).get("qpiri") or {}
+
+    @staticmethod
+    def _number(qpiri: dict, key: str) -> float | None:
+        try:
+            value = float(qpiri.get(key))
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def _evaluate(self) -> tuple[bool | None, dict]:
+        qpiri = self._qpiri()
+        ovp = self._number(qpiri, "battery_ovp")
+        bulk = self._number(qpiri, "max_charge_voltage")
+        float_v = self._number(qpiri, "float_charge_voltage")
+        recovery = self._number(qpiri, "battery_discharge_recovery_mains")
+        cutoff = self._number(qpiri, "battery_low_protection_mains")
+        soc_cut = self._number(qpiri, "soc_low_cutoff")
+        soc_util = self._number(qpiri, "soc_back_to_utility")
+        soc_batt = self._number(qpiri, "soc_back_to_battery")
+        max_charge = self._number(qpiri, "max_charging_current")
+        max_mains = self._number(qpiri, "max_utility_charging_current")
+
+        required = (ovp, bulk, float_v, recovery, cutoff, soc_cut, soc_util, soc_batt)
+        if any(value is None for value in required):
+            return None, {}
+
+        violations: list[str] = []
+        if not (ovp > bulk > float_v > recovery > cutoff):
+            violations.append("battery_voltage_order")
+        if not (soc_cut < soc_util < soc_batt):
+            violations.append("soc_order")
+        if soc_batt < 60:
+            violations.append("soc_back_to_battery_min")
+        if max_charge is not None and max_charge > SMG2_MAX_CHARGE_CURRENT:
+            violations.append("max_charge_current")
+        if max_mains is not None and max_mains > SMG2_MAX_UTILITY_CHARGE_CURRENT:
+            violations.append("max_utility_current")
+
+        language = ui_language(getattr(self, "hass", None))
+        attrs = {
+            "violations": violations,
+            "battery_voltage_order": (
+                "ovp>bulk>float>recovery>cutoff"
+                if "battery_voltage_order" not in violations
+                else "violated"
+            ),
+            "soc_order": (
+                "cutoff<utility<battery"
+                if "soc_order" not in violations
+                else "violated"
+            ),
+        }
+        if violations:
+            attrs["problem"] = " ".join(
+                _PROBLEM_TEXT[key][language] for key in violations
+            )
+        return bool(violations), attrs
+
+    @property
+    def is_on(self) -> bool | None:
+        return self._evaluate()[0]
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._evaluate()[1]

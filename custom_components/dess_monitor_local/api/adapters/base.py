@@ -56,3 +56,11 @@ class BaseAdapter(ABC):
     async def set_max_utility_charge_current(self, amps: int, float_format: bool = False) -> dict:
         payload = f"MUCHGC{amps:04.1f}" if float_format else f"MUCHGC{amps:03d}"
         return await self.set_data(payload)
+
+    async def set_register(self, address: int, value: int) -> dict:
+        """Write one raw holding register.
+
+        Only register-based adapters (SMG-II Modbus) implement this; the
+        Voltronic/agent protocols have no generic register map.
+        """
+        return {"error": "raw register writes are not supported by this adapter"}

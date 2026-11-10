@@ -253,13 +253,14 @@ class TestOfflineChildCrashSafety:
 
 
 # ---------------------------------------------------------------------------
-# Utility charging current cap (register 333 is documented up to 100 A)
+# Utility charging current cap (register 333 is 80 A on the 4.2 kW model)
 # ---------------------------------------------------------------------------
 class TestUtilityCurrentOptions:
-    def test_default_cap_is_100(self):
+    def test_default_cap_is_80(self):
         from custom_components.dess_monitor_local import select as sel
         options = sel.max_utility_charging_current_options(None)
-        assert options[-1] == "100"
+        assert options[-1] == "80"
+        assert "100" not in options
         assert "110" not in options
         assert "120" not in options
 
@@ -270,13 +271,13 @@ class TestUtilityCurrentOptions:
         )
         assert options[-1] == "60"
 
-    def test_zero_or_garbage_falls_back_to_100(self):
+    def test_zero_or_garbage_falls_back_to_80(self):
         from custom_components.dess_monitor_local import select as sel
         for value in (0, None, "n/a"):
             options = sel.max_utility_charging_current_options(
                 {"max_charging_current": value}
             )
-            assert options[-1] == "100"
+            assert options[-1] == "80"
 
     def test_entity_caps_options_from_qpiri(self):
         from custom_components.dess_monitor_local import select as sel
@@ -347,3 +348,59 @@ class TestFaultAdviceSensor:
         })
         ent._handle_coordinator_update()
         assert "No detailed advice" in ent._attr_native_value
+
+
+class TestSMG2ConfigEntities:
+    def test_battery_type_select_reads_register_code(self):
+        from custom_components.dess_monitor_local import select as sel
+
+        spec = next(
+            item for item in sel._SMG2_SELECT_SPECS
+            if item["key"] == "battery_type"
+        )
+        ent = sel.SMG2ConfigSelect(
+            _Dev(), _Coord({"qpiri": {"battery_type_code": 2}}), **spec
+        )
+        ent.hass = type("H", (), {"config": type("C", (), {"language": "fr"})()})()
+        assert ent.current_option == "Utilisateur"
+        assert ent.extra_state_attributes["raw_value"] == 2
+
+    def test_output_voltage_select_uses_raw_register_value(self):
+        from custom_components.dess_monitor_local import select as sel
+
+        spec = next(
+            item for item in sel._SMG2_SELECT_SPECS
+            if item["key"] == "output_voltage"
+        )
+        ent = sel.SMG2ConfigSelect(
+            _Dev(), _Coord({"qpiri": {"output_voltage_setting_code": 2300}}), **spec
+        )
+        assert ent.current_option == "230 V"
+        assert ent._raw_for_option("230 V") == 2300
+
+    def test_numeric_setting_reads_scaled_value(self):
+        from custom_components.dess_monitor_local import number as num
+
+        spec = next(
+            item for item in num._SMG2_NUMBER_SPECS
+            if item["key"] == "battery_ovp"
+        )
+        ent = num.SMG2ConfigNumber(
+            _Dev(), _Coord({"qpiri": {"battery_ovp": 29.4}}), **spec
+        )
+        assert ent.native_value == 29.4
+        assert ent._attr_native_max_value == 32.0
+
+    def test_switch_reads_register_bit(self):
+        from custom_components.dess_monitor_local import switch as sw
+
+        spec = next(
+            item for item in sw._SMG2_SWITCH_SPECS
+            if item["key"] == "battery_equalization"
+        )
+        ent = sw.SMG2ConfigSwitch(
+            _Dev(), _Coord({"qpiri": {"battery_eq_enabled": 1}}), **spec
+        )
+        assert ent.is_on is True
+        ent._pending_on = False
+        assert ent.is_on is False

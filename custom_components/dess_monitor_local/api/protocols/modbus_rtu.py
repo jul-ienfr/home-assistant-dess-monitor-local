@@ -372,10 +372,34 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
         "temp_inverter": R200(227),
     }
 
-    block_300 = await read_block(300, 38)
+    # 300-343 covers every documented config register, including the SOC
+    # thresholds at 341-343. Fall back to the historical 300-337 block if a
+    # firmware rejects the longer read.
+    try:
+        block_300 = await read_block(300, 44)
+        if len(block_300) < 44:
+            raise ValueError("short 300-343 block")
+        has_soc_config = True
+    except Exception:
+        block_300 = await read_block(300, 38)
+        has_soc_config = False
 
     def R300(addr: int) -> int:
         return block_300[addr - 300]
+
+    # 400-426 holds the remote controls: turn-on mode (406), remote output
+    # enable (420) and the exit-fault trigger (426). Optional: an older
+    # firmware may not expose the whole block.
+    try:
+        block_400 = await read_block(400, 27)
+    except Exception:
+        block_400 = None
+
+    def R400(addr: int) -> int | None:
+        index = addr - 400
+        if block_400 is None or len(block_400) <= index:
+            return None
+        return block_400[index]
 
     config = {
         "output_mode": R300(300),
@@ -390,7 +414,10 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
         "overload_transfer_to_bypass": R300(310),
         "battery_eq_enabled": R300(313),
         "output_voltage_setting": R300(320) / 10.0,
+        "output_voltage_setting_code": R300(320),
         "output_freq_setting": R300(321) / 100.0,
+        "output_frequency_setting_code": R300(321),
+        "battery_type": R300(322),
         "battery_ovp": R300(323) / 10.0,
         "max_charge_voltage": R300(324) / 10.0,
         "float_charge_voltage": R300(325) / 10.0,
@@ -404,7 +431,15 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
         "eq_time_minutes": R300(335),
         "eq_timeout": R300(336),
         "eq_interval_days": R300(337),
+        "turn_on_mode": R400(406),
+        "remote_output_enable": R400(420),
     }
+    if has_soc_config:
+        config.update({
+            "soc_back_to_utility": R300(341),
+            "soc_back_to_battery": R300(342),
+            "soc_low_cutoff": R300(343),
+        })
 
     return sensors, config, faults
 
@@ -483,6 +518,36 @@ def smg2_to_qpiri(c: dict) -> dict:
         "max_utility_charging_current": f"{int(c['max_mains_charging_current']):02d}",
         "max_charging_current": f"{int(c['max_charging_current']):03d}",
         "ac_input_voltage_range": ac_range_name,
+        # SMG-II config values used by the writable config entities. These
+        # keys are intentionally not in QPIRI_SENSOR_MAPPING, so they do not
+        # create duplicate read-only sensors.
+        "input_voltage_range_code": c.get("input_voltage_range"),
+        "buzzer_mode": c.get("buzzer_mode"),
+        "lcd_backlight": c.get("lcd_backlight"),
+        "lcd_auto_return": c.get("lcd_auto_return"),
+        "energy_saving_mode": c.get("energy_saving_mode"),
+        "overload_auto_restart": c.get("overload_auto_restart"),
+        "overtemp_auto_restart": c.get("overtemp_auto_restart"),
+        "overload_transfer_to_bypass": c.get("overload_transfer_to_bypass"),
+        "battery_eq_enabled": c.get("battery_eq_enabled"),
+        "output_voltage_setting_code": c.get("output_voltage_setting_code"),
+        "output_frequency_setting_code": c.get("output_frequency_setting_code"),
+        "battery_type_code": c.get("battery_type"),
+        "battery_ovp": c.get("battery_ovp"),
+        "max_charge_voltage": c.get("max_charge_voltage"),
+        "float_charge_voltage": c.get("float_charge_voltage"),
+        "battery_discharge_recovery_mains": c.get("battery_discharge_recovery_mains"),
+        "battery_low_protection_mains": c.get("battery_low_protection_mains"),
+        "battery_low_protection_offgrid": c.get("battery_low_protection_offgrid"),
+        "eq_charging_voltage": c.get("eq_charging_voltage"),
+        "eq_time_minutes": c.get("eq_time_minutes"),
+        "eq_timeout": c.get("eq_timeout"),
+        "eq_interval_days": c.get("eq_interval_days"),
+        "soc_back_to_utility": c.get("soc_back_to_utility"),
+        "soc_back_to_battery": c.get("soc_back_to_battery"),
+        "soc_low_cutoff": c.get("soc_low_cutoff"),
+        "turn_on_mode": c.get("turn_on_mode"),
+        "remote_output_enable": c.get("remote_output_enable"),
         "output_source_priority": _OUTPUT_PRIORITY_MAP.get(
             c["output_priority"], OutputSourcePriority.UtilityFirst.name
         ),

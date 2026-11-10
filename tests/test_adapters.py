@@ -129,3 +129,27 @@ class TestBaseSemanticCommands:
         a = _RecordingAdapter()
         await a.set_battery_type(BatteryTypeSetting.LIFEP04)
         assert a.sent == BatteryTypeSetting.LIFEP04.value
+
+
+class TestRawRegisterWrites:
+    @pytest.mark.asyncio
+    async def test_base_adapter_rejects_raw_register(self):
+        a = _RecordingAdapter()
+        result = await a.set_register(300, 1)
+        assert "error" in result
+        assert a.sent is None
+
+    @pytest.mark.asyncio
+    async def test_modbus_adapter_forwards_register_and_value(self):
+        a = ModbusAdapter("modbus://10.0.0.5:502")
+        calls = []
+
+        class _Transport:
+            async def write_register(self, address, value):
+                calls.append((address, value))
+                return {"status": "OK"}
+
+        a._transport = lambda: _Transport()
+        result = await a.set_register(323, 294)
+        assert result == {"status": "OK"}
+        assert calls == [(323, 294)]
