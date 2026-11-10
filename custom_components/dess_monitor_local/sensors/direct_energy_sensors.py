@@ -6,10 +6,11 @@ from datetime import UTC, datetime
 from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorStateClass
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy, UnitOfTime
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import ExtraStoredData
-from homeassistant.util import slugify
 
+from custom_components.dess_monitor_local.const import DOMAIN
 from custom_components.dess_monitor_local.sanity import (
     is_plausible_battery_current,
     is_plausible_battery_voltage,
@@ -428,59 +429,115 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         self._restored = False
         self._hass = hass
 
-        device_slug = slugify(self._inverter_device.name)
-        # The "_ah" suffix matches the new BatteryCapacityNumber name
-        # "vSoC Battery Capacity (Ah)" — HA slugifies that to
-        # "vsoc_battery_capacity_ah". The legacy Wh-based entity at
-        # "{slug}_vsoc_battery_capacity" stays orphan after upgrade and
-        # is not tracked here.
-        self._capacity_entity_id = f"number.{device_slug}_vsoc_battery_capacity_ah"
-        self._sync_voltage_entity_id = (
-            f"number.{device_slug}_vsoc_full_charge_sync_voltage"
-        )
-        self._battery_mode_entity_id = f"select.{device_slug}_vsoc_battery_mode"
-        # Float-mode deadband controls (switch + two numbers). Defaults
-        # mirror the historical hardcoded constants so the feature is a
-        # no-op until the user touches the entities.
-        self._float_deadband_switch_id = (
-            f"switch.{device_slug}_vsoc_float_deadband"
-        )
-        self._float_voltage_window_id = (
-            f"number.{device_slug}_vsoc_float_voltage_window"
-        )
-        self._float_noise_floor_id = (
-            f"number.{device_slug}_vsoc_float_noise_floor"
-        )
+        # Entity IDs are resolved through the entity registry (by
+        # unique_id) once the entity is added, not guessed from the device
+        # name. HA can prefix the entity_id, and users can rename any of
+        # these controls; a slug guess then silently breaks the whole vSoC
+        # family. ``_handle_registry_updated`` re-resolves after the
+        # number/select/switch platforms finish creating their entities.
+        self._capacity_entity_id: str | None = None
+        self._sync_voltage_entity_id: str | None = None
+        self._battery_mode_entity_id: str | None = None
+        self._float_deadband_switch_id: str | None = None
+        self._float_voltage_window_id: str | None = None
+        self._float_noise_floor_id: str | None = None
+        self._unsub_state_listeners: list = []
+        self._unsub_registry = None
         # User-defined override for the SoC snap-to-100% voltage. 0 = use
         # inverter's bulk_charging_voltage. Resolution stays in the entity
         # (it reads HA state); the resolved value is passed into the
         # estimator on each tick.
         self._full_charge_sync_voltage = 0.0
 
-        async_track_state_change_event(
-            self._hass,
-            [self._capacity_entity_id],
-            self._handle_battery_capacity_change,
+    def _resolve_entity_ids(self) -> None:
+        """Map the vSoC controls' unique_ids to their current entity_ids."""
+        registry = er.async_get(self._hass)
+        inverter_id = self._inverter_device.inverter_id
+
+        def lookup(platform: str, suffix: str) -> str | None:
+            return registry.async_get_entity_id(
+                platform, DOMAIN, f"{inverter_id}_{suffix}"
+            )
+
+        self._capacity_entity_id = lookup("number", "battery_capacity_ah")
+        self._sync_voltage_entity_id = lookup(
+            "number", "full_charge_sync_voltage"
         )
-        async_track_state_change_event(
-            self._hass,
-            [self._sync_voltage_entity_id],
-            self._handle_sync_voltage_change,
+        self._battery_mode_entity_id = lookup("select", "battery_mode")
+        self._float_deadband_switch_id = lookup("switch", "float_deadband")
+        self._float_voltage_window_id = lookup(
+            "number", "float_voltage_window"
         )
-        async_track_state_change_event(
-            self._hass,
-            [self._battery_mode_entity_id],
-            self._handle_battery_mode_change,
+        self._float_noise_floor_id = lookup("number", "float_noise_floor")
+
+    def _detach_state_listeners(self) -> None:
+        for unsub in self._unsub_state_listeners:
+            unsub()
+        self._unsub_state_listeners = []
+
+    def _attach_state_listeners(self) -> None:
+        self._detach_state_listeners()
+        specs = (
+            ([self._capacity_entity_id], self._handle_battery_capacity_change),
+            ([self._sync_voltage_entity_id], self._handle_sync_voltage_change),
+            ([self._battery_mode_entity_id], self._handle_battery_mode_change),
+            (
+                [
+                    self._float_deadband_switch_id,
+                    self._float_voltage_window_id,
+                    self._float_noise_floor_id,
+                ],
+                self._handle_float_deadband_change,
+            ),
         )
-        async_track_state_change_event(
-            self._hass,
-            [
-                self._float_deadband_switch_id,
-                self._float_voltage_window_id,
-                self._float_noise_floor_id,
-            ],
-            self._handle_float_deadband_change,
+        for entity_ids, handler in specs:
+            ids = [entity_id for entity_id in entity_ids if entity_id]
+            if ids:
+                self._unsub_state_listeners.append(
+                    async_track_state_change_event(self._hass, ids, handler)
+                )
+
+    def _state(self, entity_id: str | None):
+        return self._hass.states.get(entity_id) if entity_id else None
+
+    def _refresh_vsoc_inputs(self) -> None:
+        self._update_battery_capacity_from_state(
+            self._state(self._capacity_entity_id)
         )
+        self._update_sync_voltage_from_state(
+            self._state(self._sync_voltage_entity_id)
+        )
+        self._update_battery_mode_from_state(
+            self._state(self._battery_mode_entity_id)
+        )
+        self._refresh_float_deadband_config()
+
+    @callback
+    def _handle_registry_updated(self, event) -> None:
+        """Re-resolve IDs when the number/select/switch entities appear."""
+        if event.data.get("action") not in ("create", "update", "remove"):
+            return
+        previous = (
+            self._capacity_entity_id,
+            self._sync_voltage_entity_id,
+            self._battery_mode_entity_id,
+            self._float_deadband_switch_id,
+            self._float_voltage_window_id,
+            self._float_noise_floor_id,
+        )
+        self._resolve_entity_ids()
+        current = (
+            self._capacity_entity_id,
+            self._sync_voltage_entity_id,
+            self._battery_mode_entity_id,
+            self._float_deadband_switch_id,
+            self._float_voltage_window_id,
+            self._float_noise_floor_id,
+        )
+        if current == previous:
+            return
+        self._attach_state_listeners()
+        self._refresh_vsoc_inputs()
 
     async def async_added_to_hass(self) -> None:
         last_extra = await self.async_get_last_extra_data()
@@ -514,20 +571,24 @@ class DirectBatteryStateOfChargeSensor(RestoreSensor, DirectTypedSensorBase):
         )
         self._attr_native_value = soc
 
-        state = self._hass.states.get(self._capacity_entity_id)
-        self._update_battery_capacity_from_state(state)
-
-        sync_state = self._hass.states.get(self._sync_voltage_entity_id)
-        self._update_sync_voltage_from_state(sync_state)
-
-        mode_state = self._hass.states.get(self._battery_mode_entity_id)
-        self._update_battery_mode_from_state(mode_state)
-
-        # Float-deadband controls — read whatever's already restored.
-        self._refresh_float_deadband_config()
-
         self._restored = True
+        # Add the entity first: registry/state callbacks below call
+        # async_write_ha_state(), which must not run before HA has an
+        # entity_id for this sensor.
         await super().async_added_to_hass()
+
+        self._resolve_entity_ids()
+        self._attach_state_listeners()
+        self._refresh_vsoc_inputs()
+        # The number/select/switch platforms may not have created their
+        # entities yet when this sensor is added (sensor is the first
+        # platform forwarded). Listen for registry changes and re-resolve
+        # as they appear — including after a user renames one.
+        self._unsub_registry = self._hass.bus.async_listen(
+            er.EVENT_ENTITY_REGISTRY_UPDATED, self._handle_registry_updated
+        )
+        self.async_on_remove(self._unsub_registry)
+        self.async_on_remove(self._detach_state_listeners)
 
     async def async_get_extra_data(self) -> ExtraStoredData:
         """Сохранение данных при выгрузке / рестарте."""
@@ -827,11 +888,15 @@ class DirectBatteryTimeToFloorSensor(_TimeEstimateBase):
         self._attr_name = (
             f"{inverter_device.name} vSoC Time to Discharge Floor"
         )
-        device_slug = slugify(inverter_device.name)
-        self._floor_entity_id = f"number.{device_slug}_vsoc_discharge_floor"
+        self._floor_unique_id = (
+            f"{inverter_device.inverter_id}_discharge_floor_soc"
+        )
 
     def _read_target_floor(self) -> float:
-        state = self._hass.states.get(self._floor_entity_id)
+        entity_id = er.async_get(self._hass).async_get_entity_id(
+            "number", DOMAIN, self._floor_unique_id
+        )
+        state = self._hass.states.get(entity_id) if entity_id else None
         if state is None or state.state in ("unknown", "unavailable", None):
             return 15.0  # match DischargeFloorSoCNumber default
         try:
@@ -931,11 +996,15 @@ class DirectBatteryBackupTimeSensor(_TimeEstimateBase):
         self._attr_name = (
             f"{inverter_device.name} vSoC Backup Time at Current Load"
         )
-        device_slug = slugify(inverter_device.name)
-        self._floor_entity_id = f"number.{device_slug}_vsoc_discharge_floor"
+        self._floor_unique_id = (
+            f"{inverter_device.inverter_id}_discharge_floor_soc"
+        )
 
     def _read_target_floor(self) -> float:
-        state = self._hass.states.get(self._floor_entity_id)
+        entity_id = er.async_get(self._hass).async_get_entity_id(
+            "number", DOMAIN, self._floor_unique_id
+        )
+        state = self._hass.states.get(entity_id) if entity_id else None
         if state is None or state.state in ("unknown", "unavailable", None):
             return 15.0
         try:

@@ -21,12 +21,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
 
-  # Temporarily disabled — re-enable once the repo meets HACS requirements
-  # (brands registration, etc.).
-  # hacs:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: hacs/action@main
-  #       with:
-  #         category: integration
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Fork constraints: upstream declares no license, and the GitHub
+          # description/topics/brands/assets are maintained outside this
+          # repository. The repository structure, hacs.json and manifest are
+          # still validated.
+          ignore: brands description license topics information images

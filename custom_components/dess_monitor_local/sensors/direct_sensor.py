@@ -106,6 +106,30 @@ class DirectTypedSensorBase(DirectSensorBase):
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_direct_{suffix}"
         self._attr_name = f"{self._inverter_device.name} Direct {name_part}"
 
+    @property
+    def extra_state_attributes(self):
+        """Expose whether this section is currently frozen on stale data.
+
+        ``getattr`` rather than a direct ``_attr_extra_state_attributes``
+        access is deliberate: many entities never define it, and raising
+        here makes Home Assistant mark the whole entity unavailable (the
+        K3rn3l fork hit this on 58 of 91 entities).
+        """
+        attrs = dict(getattr(self, "_attr_extra_state_attributes", None) or {})
+        coordinator = getattr(self, "coordinator", None)
+        device = getattr(self, "_inverter_device", None)
+        section = getattr(self, "data_section", None)
+        if (
+            coordinator is not None
+            and device is not None
+            and section
+            and hasattr(coordinator, "section_failures")
+        ):
+            stale = coordinator.section_failures(device.inverter_id, section)
+            attrs["stale_cycles"] = stale
+            attrs["stale"] = stale > 0
+        return attrs
+
     @callback
     def _handle_coordinator_update(self) -> None:
         section = self.data.get(self.data_section, {})
@@ -413,14 +437,18 @@ class DirectACOutputFrequencySensor(DirectTypedSensorBase):
                          "AC Output Frequency")
 
 
-class DirectOutputApparentPowerSensor(DirectWattSensorBase):
+class DirectOutputApparentPowerSensor(DirectApparentPowerSensorBase):
     def __init__(self, inverter_device, coordinator):
         super().__init__(inverter_device, coordinator, "qpigs", "output_apparent_power", "output_apparent_power",
                          "Apparent Power")
 
 
 class DirectLoadPercentSensor(DirectTypedSensorBase):
-    device_class = SensorDeviceClass.POWER_FACTOR
+    # A percentage is not a power factor. POWER_FACTOR made HA render the
+    # value with the wrong semantics (and reject the "%" unit on some
+    # versions); leave the device class unset.
+    device_class = None
+    _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_unit_of_measurement = "%"
     _attr_native_unit_of_measurement = "%"
@@ -463,6 +491,20 @@ class DirectBatteryPowerSensor(DirectWattSensorBase):
         qpigs = self.data.get('qpigs', {})
         if not qpigs:
             self._attr_native_value = None
+            self.async_write_ha_state()
+            return
+        # SMG-II reports the signed battery power directly (register 217,
+        # positive = charging). Prefer it over re-deriving from the two
+        # integer-truncated current fields.
+        raw_power = qpigs.get('battery_power')
+        if raw_power is not None:
+            try:
+                value = float(raw_power)
+            except (TypeError, ValueError):
+                value = None
+            self._attr_native_value = (
+                value if value is not None and is_plausible_power(value) else None
+            )
             self.async_write_ha_state()
             return
         try:
@@ -576,7 +618,39 @@ QPIRI_SENSOR_MAPPING = {
 }
 
 
-def generate_qpiri_sensors(inverter_device, coordinator):
+# QPIRI keys the SMG-II Modbus map does not provide. The projection fills
+# them with constants (4000 W, "UserDefined", 24 V, ...) to keep the
+# Voltronic-shaped dict complete, but exposing those constants as sensors
+# is misleading. Modbus deployments skip these entities entirely.
+MODBUS_UNSUPPORTED_QPIRI_KEYS = frozenset({
+    "rated_grid_voltage",
+    "rated_input_current",
+    "rated_ac_output_voltage",
+    "rated_output_frequency",
+    "rated_output_current",
+    "rated_output_apparent_power",
+    "rated_output_active_power",
+    "rated_battery_voltage",
+    "battery_type",
+    "parallel_max_number",
+    "reserved_uu",
+    "reserved_v",
+    "parallel_mode",
+    "solar_work_condition_in_parallel",
+    "solar_max_charging_power_auto_adjust",
+    "rated_battery_capacity",
+    "reserved_b",
+    "reserved_ccc",
+})
+
+
+def generate_qpiri_sensors(inverter_device, coordinator, *, skip_keys=()):
+    """Create QPIRI-backed sensors, optionally omitting fabricated fields.
+
+    ``skip_keys`` lets protocol paths (SMG-II/Modbus) hide keys the
+    inverter never reports instead of exposing constants as if they were
+    measurements.
+    """
     return [
         sensor_class(
             inverter_device=inverter_device,
@@ -586,6 +660,7 @@ def generate_qpiri_sensors(inverter_device, coordinator):
             name_suffix=name_suffix,
         )
         for data_key, (sensor_class, name_suffix) in QPIRI_SENSOR_MAPPING.items()
+        if data_key not in skip_keys
     ]
 
 
@@ -616,7 +691,8 @@ class DirectDeviceStatusSensor(DirectSensorBase):
             self._attr_native_value = 'INVERTER_OVERLOAD'
         elif flags & DeviceStatusBitsB7B0.BATTERY_LOW:
             self._attr_native_value = 'BATTERY_LOW'
-        self._attr_native_value = 'OK'
+        else:
+            self._attr_native_value = 'OK'
         self.async_write_ha_state()
 
     @property
@@ -877,6 +953,19 @@ def _flag_attrs(flags: dict) -> dict:
             attrs[key] = value
     attrs["active_count"] = active
     return attrs
+
+
+# Sensors that depend on QPIGS/QPIGS2 fields SMG-II does not report. They
+# are hidden for Modbus entries instead of publishing constants ("OK",
+# 400 V bus, mirrored SCC voltage) or permanently-empty values.
+MODBUS_UNSUPPORTED_SENSORS = frozenset({
+    DirectPV2PowerSensor,
+    DirectPV2VoltageSensor,
+    DirectPV2CurrentSensor,
+    DirectBusVoltageSensor,
+    DirectSCCBatteryVoltageSensor,
+    DirectDeviceStatusSensor,
+})
 
 
 DIRECT_SENSORS = [

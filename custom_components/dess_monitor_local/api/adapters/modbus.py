@@ -27,6 +27,18 @@ _LOGGER = logging.getLogger(__name__)
 
 _EYBOND_MODBUS_SCHEME = "eybond-modbus://"
 
+# SMG-II register 201 reports a numeric operating mode; the rest of the
+# integration consumes QMOD-shaped ``OperatingMode`` member names.
+_SMG2_OPERATING_MODES = {
+    "Power On": "PowerOn",
+    "Standby": "Standby",
+    "Mains": "Line",
+    "Off-Grid": "Battery",
+    "Bypass": "Line",
+    "Charging": "Line",
+    "Fault": "Fault",
+}
+
 # The coordinator reads SMG-II via six Voltronic-shaped commands per cycle
 # (QPIGS/QPIRI/QMOD/QPIGS2/QPIWS/QFWS), and each historically re-read the full
 # 3-block register snapshot — 18 Modbus transactions per device per cycle.
@@ -37,6 +49,10 @@ _EYBOND_MODBUS_SCHEME = "eybond-modbus://"
 # default poll interval; very short intervals are effectively rate-limited to
 # it (fine — inverter state changes slowly).
 _SNAPSHOT_TTL = 5.0
+# A failed read is cached for only a fraction of a second so the
+# coordinator's 0.25 s retry can actually reach the inverter, while the
+# remaining commands of the same cycle still avoid re-hammering the bus.
+_SNAPSHOT_FAILURE_TTL = 0.2
 # key (device uri) -> (monotonic_ts, snapshot tuple | None)
 _SNAPSHOT_CACHE: dict[str, tuple[float, tuple | None]] = {}
 
@@ -52,14 +68,19 @@ async def _cached_snapshot(cache_key: str, read_block):
     doesn't re-hammer the bus with six failing reads."""
     now = time.monotonic()
     entry = _SNAPSHOT_CACHE.get(cache_key)
-    if entry is not None and (now - entry[0]) < _SNAPSHOT_TTL:
-        return entry[1]
+    if entry is not None:
+        ttl = _SNAPSHOT_TTL if entry[1] is not None else _SNAPSHOT_FAILURE_TTL
+        if (now - entry[0]) < ttl:
+            return entry[1]
     try:
         snapshot = await read_smg2_snapshot_via(read_block)
     except Exception as err:  # noqa: BLE001 — transport/parse failure
         _LOGGER.debug("ModbusAdapter snapshot read failed: %s", err)
         snapshot = None
-    _SNAPSHOT_CACHE[cache_key] = (now, snapshot)
+    # Stamp AFTER the read. A slow read (the Eybond dongle can take longer
+    # than the TTL to return three blocks) must not be born already expired,
+    # otherwise every command in the cycle re-reads all three blocks.
+    _SNAPSHOT_CACHE[cache_key] = (time.monotonic(), snapshot)
     return snapshot
 
 
@@ -140,8 +161,24 @@ class ModbusAdapter(BaseAdapter):
             return smg2_to_qpigs(sensors)
         if command == "QPIRI":
             return smg2_to_qpiri(config)
+        if command == "QMOD":
+            mode = sensors.get("operation_mode")
+            return {"operating_mode": _SMG2_OPERATING_MODES.get(mode)}
+        if command in ("QPIWS", "QFWS"):
+            # Fault data is already flat (fault_code, warning_code,
+            # has_fault, ...). Returning it at the top level is what the
+            # fault-summary sensor and the any-warning binary sensor read.
+            return dict(faults)
         # ... other command emulations from dispatcher.py ...
         return {"sensors": sensors, "config": config, "faults": faults}
+
+    async def write_register(self, address: int, value: int) -> dict:
+        """Write one holding register through the configured transport.
+
+        Exposed for one-shot actions (e.g. Exit Fault State, register 426)
+        that are not covered by a semantic setter.
+        """
+        return await self._transport().write_register(address, value)
 
     async def set_data(self, command: str) -> dict:
         return {"error": "raw set_data is not supported for Modbus; use semantic setters"}

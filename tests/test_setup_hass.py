@@ -12,6 +12,8 @@ What they cover that the lightweight ``test_entities.py`` can't:
 
 The transport is mocked at ``get_direct_data`` so no socket is opened.
 """
+import asyncio
+
 import pytest
 
 # Skip unless the plugin's ``common`` helpers are actually importable
@@ -93,6 +95,10 @@ async def test_setup_creates_entities_and_unloads(hass, enable_custom_integratio
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+        # The first poll is deliberately a background task now; await one
+        # refresh explicitly so the value assertions are deterministic.
+        await entry.runtime_data.direct_coordinator.async_refresh()
+        await hass.async_block_till_done()
 
         # A representative live sensor exists and carries the decoded value.
         state = hass.states.get("sensor.test_inv_direct_grid_voltage")
@@ -103,9 +109,58 @@ async def test_setup_creates_entities_and_unloads(hass, enable_custom_integratio
         assert hass.states.get("number.test_inv_vsoc_battery_capacity_ah") is not None
         assert hass.states.get("select.test_inv_vsoc_battery_mode") is not None
 
-    # Clean teardown — the command queue must drain without lingering tasks.
-    assert await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
+        # Clean teardown — the command queue must drain without lingering
+        # tasks. Keep this inside the patch: the initial background poll may
+        # still be winding down, and it must not reach a real transport.
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+async def test_setup_does_not_wait_for_first_poll(
+    hass, enable_custom_integrations
+):
+    """Entry setup returns while the initial inverter poll is still blocked."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    gate = asyncio.Event()
+    started = asyncio.Event()
+
+    replies = {
+        "QPIGS": dict(_QPIGS),
+        "QPIRI": dict(_QPIRI),
+        "QMOD": {"operating_mode": "Line"},
+        "QPIGS2": {
+            "pv_current": "0.0",
+            "pv_voltage": "0.0",
+            "pv_daily_energy": "0.0",
+        },
+        "QPIWS": {"overload": False},
+        "QFWS": {"fault_code": 0},
+    }
+
+    async def slow_get(device, command, timeout=30, strict_crc=False):
+        started.set()
+        await gate.wait()
+        return dict(replies.get(command, {}))
+
+    with patch(
+        "custom_components.dess_monitor_local.coordinators.direct_coordinator.get_direct_data",
+        side_effect=slow_get,
+    ):
+        # If setup waited for the poll this would time out.
+        await asyncio.wait_for(
+            hass.config_entries.async_setup(entry.entry_id), timeout=5
+        )
+        await asyncio.wait_for(started.wait(), timeout=5)
+        assert not gate.is_set()
+
+        # Let the background poll finish, then unload while the transport is
+        # still patched.
+        gate.set()
+        await hass.async_block_till_done()
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
 
 
 # ---------------------------------------------------------------------------

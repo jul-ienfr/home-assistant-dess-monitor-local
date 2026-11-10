@@ -335,9 +335,11 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
         "output_current": _i16(R200(211)) / 10.0,
         "output_frequency": R200(212) / 100.0,
         "output_active_power": _i16(R200(213)),
+        "output_apparent_power": _i16(R200(214)),
         "battery_voltage": R200(215) / 10.0,
         "battery_current": _i16(R200(216)) / 10.0,
         "battery_power": _i16(R200(217)),
+        "battery_soc": R200(229),
         "pv_voltage": R200(219) / 10.0,
         "pv_current": R200(220) / 10.0,
         "pv_power": _i16(R200(223)),
@@ -385,35 +387,35 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
 
 
 def smg2_to_qpigs(s: dict) -> dict:
-    """Project SMG-II sensor block onto the QPIGS-shaped dict."""
-    bus_voltage = 400  # SMG-II has no dedicated bus voltage register
+    """Project SMG-II sensor block onto the QPIGS-shaped dict.
 
+    Only values that actually come from the inverter are projected. The
+    QPIGS-only fields SMG-II does not report (bus voltage, status bits,
+    SCC voltage, EEPROM version) are deliberately omitted: screen them out
+    of the entity list instead of inventing values that look plausible.
+    """
     battery_charging_current = max(0, int(s["battery_current"]))
     battery_discharge_current = max(0, int(-s["battery_current"]))
+    battery_soc = min(100, max(0, int(s["battery_soc"])))
 
     return {
         "grid_voltage": f"{s['mains_voltage']:.1f}",
         "grid_frequency": f"{s['mains_frequency']:.1f}",
         "ac_output_voltage": f"{s['output_voltage']:.1f}",
         "ac_output_frequency": f"{s['output_frequency']:.2f}",
-        "output_apparent_power": f"{abs(s['output_active_power']):04d}",
+        "output_apparent_power": f"{abs(s['output_apparent_power']):04d}",
         "output_active_power": f"{abs(s['output_active_power']):04d}",
         "load_percent": f"{s['load_percent']:03d}",
-        "bus_voltage": f"{bus_voltage}",
         "battery_voltage": f"{s['battery_voltage']:.2f}",
         "battery_charging_current": f"{battery_charging_current:03d}",
-        "battery_capacity": "100",
+        "battery_capacity": f"{battery_soc:03d}",
         "inverter_heat_sink_temperature": f"{s['temp_inverter']:.1f}",
         "inverter_dcdc_module_temperature": f"{s['temp_dcdc']:.1f}",
         "pv_input_current": f"{s['pv_current']:.1f}",
         "pv_input_voltage": f"{s['pv_voltage']:.1f}",
-        "scc_battery_voltage": f"{s['battery_voltage']:.2f}",
         "battery_discharge_current": f"{battery_discharge_current:05d}",
-        "device_status_bits_b7_b0": "00010000",
-        "battery_voltage_offset": "00",
-        "eeprom_version": "00",
+        "battery_power": f"{s['battery_power']}",
         "pv_charging_power": f"{int(s['pv_power']):05d}",
-        "device_status_bits_b10_b8": "010",
         "grid_ac_in_power": f"{abs(s['mains_power']):05d}",
     }
 

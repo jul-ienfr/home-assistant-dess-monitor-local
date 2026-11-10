@@ -10,6 +10,9 @@ import pytest
 
 from custom_components.dess_monitor_local.api.adapters import modbus as modadapter
 from custom_components.dess_monitor_local.api.crc import crc16_modbus
+from custom_components.dess_monitor_local.api.decoders.enums import (
+    OutputSourcePrioritySetting,
+)
 from custom_components.dess_monitor_local.api.protocols import modbus_rtu
 
 
@@ -50,9 +53,12 @@ _SENSORS = {
     "output_voltage": 230.6,
     "output_frequency": 50.0,
     "output_active_power": 408,
+    "output_apparent_power": 420,
     "load_percent": 11,
     "battery_voltage": 27.3,
     "battery_current": -14.0,   # discharging
+    "battery_power": -382,
+    "battery_soc": 68,
     "temp_inverter": 30,
     "temp_dcdc": 27,
     "pv_current": 0.0,
@@ -83,10 +89,35 @@ class TestSmg2ToQpigs:
         d = modbus_rtu.smg2_to_qpigs(_SENSORS)
         for key in (
             "grid_voltage", "battery_voltage", "battery_charging_current",
-            "battery_discharge_current", "device_status_bits_b7_b0",
-            "pv_charging_power",
+            "battery_discharge_current", "battery_capacity",
+            "output_apparent_power", "battery_power", "pv_charging_power",
         ):
             assert key in d
+
+    def test_real_soc_from_register_229(self):
+        d = modbus_rtu.smg2_to_qpigs(_SENSORS)
+        # 68% is the inverter's own value; the old projection hardcoded 100.
+        assert d["battery_capacity"] == "068"
+
+    def test_real_apparent_power_from_register_214(self):
+        d = modbus_rtu.smg2_to_qpigs(_SENSORS)
+        # 420 VA is register 214; the old projection copied 408 W.
+        assert d["output_apparent_power"] == "0420"
+
+    def test_signed_battery_power_from_register_217(self):
+        d = modbus_rtu.smg2_to_qpigs(_SENSORS)
+        assert d["battery_power"] == "-382"
+
+    def test_no_fabricated_qpigs_fields(self):
+        # SMG-II has no bus voltage, SCC voltage, status bits or EEPROM
+        # version. They must be absent, not plausible-looking constants.
+        d = modbus_rtu.smg2_to_qpigs(_SENSORS)
+        for key in (
+            "bus_voltage", "scc_battery_voltage", "device_status_bits_b7_b0",
+            "device_status_bits_b10_b8", "battery_voltage_offset",
+            "eeprom_version",
+        ):
+            assert key not in d
 
 
 _CONFIG = {
@@ -121,6 +152,10 @@ class TestSmg2ToQpiri:
         d = modbus_rtu.smg2_to_qpiri(_CONFIG)
         # 0 -> UtilityFirst per _OUTPUT_PRIORITY_MAP.
         assert d["output_source_priority"] == "UtilityFirst"
+
+    def test_sub_priority_mapped(self):
+        d = modbus_rtu.smg2_to_qpiri(dict(_CONFIG, output_priority=3))
+        assert d["output_source_priority"] == "SUB"
 
 
 class TestRtuFraming:
@@ -194,6 +229,75 @@ class TestEybondModbusTransport:
                 asyncio.run(t.read_block(201, 2))
 
 
+class TestSubPriorityWrite:
+    def test_writes_register_301_value_3(self):
+        captured = {}
+
+        async def fake_send(uri, frame, timeout, context="", pn=None):
+            captured["frame"] = frame
+            return modbus_rtu.build_write_single_frame(
+                301, 3, unit_id=1, func_code=0x06
+            )
+
+        adapter = modadapter.ModbusAdapter(
+            "eybond-modbus://0.0.0.0:8899/1?pn=PN_SUB"
+        )
+        with patch.object(modadapter, "send_eybond_bytes", side_effect=fake_send):
+            result = asyncio.run(
+                adapter.set_output_source_priority(
+                    OutputSourcePrioritySetting.SUB_PRIORITY
+                )
+            )
+        assert result.get("status") == "OK"
+        frame = captured["frame"]
+        assert frame[1] == 0x06
+        # register 301 = 0x012D, value 3
+        assert frame[2:6] == bytes([0x01, 0x2D, 0x00, 0x03])
+
+
+class TestCommandEmulation:
+    def test_qmod_maps_smg2_mode_to_enum_name(self):
+        async def fake_snapshot(read_block):
+            sensors = dict(_SENSORS, operation_mode="Mains")
+            return sensors, dict(_CONFIG), {}
+
+        modadapter._clear_snapshot_cache()
+        with patch.object(
+            modadapter, "read_smg2_snapshot_via", side_effect=fake_snapshot
+        ):
+            out = asyncio.run(
+                modadapter.ModbusAdapter(
+                    "eybond-modbus://0.0.0.0:8899/1?pn=PN_MODE"
+                ).get_data("QMOD")
+            )
+        assert out == {"operating_mode": "Line"}
+
+    def test_qpiws_and_qfws_expose_flat_fault_codes(self):
+        faults = {
+            "fault_code": 0x00000004,
+            "warning_code": 0,
+            "has_fault": True,
+            "has_warning": False,
+            "fault_description": "SMG-II fault 0x00000004",
+        }
+
+        async def fake_snapshot(read_block):
+            return dict(_SENSORS), dict(_CONFIG), dict(faults)
+
+        for command in ("QPIWS", "QFWS"):
+            modadapter._clear_snapshot_cache()
+            with patch.object(
+                modadapter, "read_smg2_snapshot_via", side_effect=fake_snapshot
+            ):
+                out = asyncio.run(
+                    modadapter.ModbusAdapter(
+                        "eybond-modbus://0.0.0.0:8899/1?pn=PN_FAULT"
+                    ).get_data(command)
+                )
+            assert out["fault_code"] == 0x00000004
+            assert out["has_fault"] is True
+
+
 class TestSnapshotCache:
     def test_one_read_serves_all_commands_within_ttl(self):
         calls = {"n": 0}
@@ -210,6 +314,29 @@ class TestSnapshotCache:
                 out = asyncio.run(modadapter.ModbusAdapter(uri).get_data(cmd))
                 assert out is not None
         # All six commands of a cycle shared a single snapshot read.
+        assert calls["n"] == 1
+
+    def test_slow_read_is_not_born_expired(self):
+        """Regression: the cache timestamp must be taken after the read.
+
+        With the old pre-read timestamp, a read longer than the TTL stored
+        an already-expired entry, so all six commands re-read three blocks
+        (18 transactions instead of 3).
+        """
+        calls = {"n": 0}
+
+        async def slow_snapshot(read_block):
+            calls["n"] += 1
+            await asyncio.sleep(0.05)
+            return (dict(_SENSORS), dict(_CONFIG), {})
+
+        modadapter._clear_snapshot_cache()
+        uri = "eybond-modbus://0.0.0.0:8899/1?pn=PN_SLOW"
+        with patch.object(modadapter, "_SNAPSHOT_TTL", 0.01), patch.object(
+            modadapter, "read_smg2_snapshot_via", side_effect=slow_snapshot
+        ):
+            for cmd in ("QPIGS", "QPIRI", "QMOD", "QPIGS2", "QPIWS", "QFWS"):
+                asyncio.run(modadapter.ModbusAdapter(uri).get_data(cmd))
         assert calls["n"] == 1
 
     def test_distinct_uris_cache_independently(self):

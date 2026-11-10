@@ -1,3 +1,5 @@
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
@@ -20,6 +22,8 @@ from custom_components.dess_monitor_local.api.commands.direct_commands import (
 from custom_components.dess_monitor_local.const import DOMAIN
 from custom_components.dess_monitor_local.coordinators.direct_coordinator import DirectCoordinator
 from custom_components.dess_monitor_local.hub import InverterDevice
+
+_LOGGER = logging.getLogger(__name__)
 
 BATTERY_MODE_LI_VOLTAGE = "Lithium (Voltage)"
 BATTERY_MODE_LI_BMS = "Lithium (BMS)"
@@ -198,9 +202,17 @@ class InverterOutputPrioritySelect(SelectBase):
                 'SUB': OutputSourcePrioritySetting.SUB_PRIORITY,
             }
             queue = await get_command_queue(self.hass, self._inverter_device.device_data)
-            await queue.enqueue(
+            result = await queue.enqueue(
                 lambda: set_output_source_priority(self._inverter_device.device_data, map_priority[option]))
+            if isinstance(result, dict) and result.get("error"):
+                _LOGGER.warning(
+                    "Output priority write failed for %s: %s",
+                    self._inverter_device.name, result["error"],
+                )
+                return
             self._attr_current_option = option
+            self.async_write_ha_state()
+            self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()
 
 
@@ -231,9 +243,17 @@ class InverterChargeSourcePrioritySelect(SelectBase):
                 'SolarAndUtility': ChargeSourcePrioritySetting.SOLAR_AND_UTILITY,
             }
             queue = await get_command_queue(self.hass, self._inverter_device.device_data)
-            await queue.enqueue(
+            result = await queue.enqueue(
                 lambda: set_charge_source_priority(self._inverter_device.device_data, map_priority[option]))
+            if isinstance(result, dict) and result.get("error"):
+                _LOGGER.warning(
+                    "Charge source priority write failed for %s: %s",
+                    self._inverter_device.name, result["error"],
+                )
+                return
             self._attr_current_option = option
+            self.async_write_ha_state()
+            self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()
 
 
@@ -274,10 +294,18 @@ class InverterMaxUtilityChargingCurrentNumber(SelectBase):
             amps = int(option)
             float_format = self._raw_readback is not None and '.' in self._raw_readback
             queue = await get_command_queue(self.hass, self._inverter_device.device_data)
-            await queue.enqueue(
+            result = await queue.enqueue(
                 lambda: set_max_utility_charge_current(
                     self._inverter_device.device_data, amps, float_format=float_format
                 )
             )
+            if isinstance(result, dict) and result.get("error"):
+                _LOGGER.warning(
+                    "Max utility charging current write failed for %s: %s",
+                    self._inverter_device.name, result["error"],
+                )
+                return
             self._attr_current_option = option
+            self.async_write_ha_state()
+            self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()

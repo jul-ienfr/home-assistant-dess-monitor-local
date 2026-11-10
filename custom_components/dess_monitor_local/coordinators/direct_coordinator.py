@@ -29,6 +29,9 @@ from custom_components.dess_monitor_local.coordinators.failure_tracker import (
     FailureOutcome,
     FailureTracker,
 )
+from custom_components.dess_monitor_local.coordinators.rejection import (
+    is_rejected,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +106,13 @@ class DirectCoordinator(DataUpdateCoordinator):
         self._failures = FailureTracker(self._MAX_CONSECUTIVE_FAILURES)
         # Cycle counter driving the split poll cadence (see _CMD_SCHEDULE).
         self._cycle = 0
+        # Sections that must be refreshed on the next cycle even if their
+        # normal cadence says otherwise (used by the select entities after
+        # a write so the optimistic value is confirmed immediately).
+        self._forced_sections: set[str] = set()
+        self._cmd_by_section = {
+            section: cmd for cmd, section, _ in self._CMD_SCHEDULE
+        }
         # self.my_api = my_api
         # self._device: MyDevice | None = None
 
@@ -128,18 +138,30 @@ class DirectCoordinator(DataUpdateCoordinator):
         self.devices = list(targets)
 
     def _child_failure_summary(self) -> dict:
-        """Per-child ``"ok"`` / ``"fail:N"`` for the debug panel's cycle event.
-
-        ``FailureTracker._counts`` is ``{device: {command: consecutive_fails}}``;
-        sum a child's command failures.
-        """
-        counts = getattr(self._failures, "_counts", {}) or {}
+        """Per-child ``"ok"`` / ``"fail:N"`` for the debug panel's cycle event."""
         out: dict = {}
         for target in self.devices:
             key = getattr(target, "id", target)
-            n = sum((counts.get(key) or {}).values())
+            n = sum(
+                self._failures.count(key, cmd)
+                for cmd, _section, _cadence in self._CMD_SCHEDULE
+            )
             out[key] = "ok" if n == 0 else f"fail:{n}"
         return out
+
+    def force_section(self, section: str) -> None:
+        """Refresh *section* on the next poll regardless of its cadence.
+
+        Called after a successful write so a select does not have to wait
+        up to 12 cycles (2 minutes at the default interval) for QPIRI to
+        confirm the new value.
+        """
+        self._forced_sections.add(section)
+
+    def section_failures(self, device_id: str, section: str) -> int:
+        """Consecutive failures for the command that feeds *section*."""
+        cmd = self._cmd_by_section.get(section)
+        return self._failures.count(device_id, cmd) if cmd else 0
 
     async def get_active_devices(self):
         # Explicit targets (EyBond hub children) take precedence.
@@ -206,8 +228,25 @@ class DirectCoordinator(DataUpdateCoordinator):
                     )
                     result = None
                 if result:
-                    self._failures.on_success(key, cmd)
-                    return result
+                    error = (
+                        result.get("error")
+                        if isinstance(result, dict)
+                        else None
+                    )
+                    if is_rejected(cmd, error):
+                        # A real NAK/exception is not a successful read. Fall
+                        # through to the retry/failure path instead of
+                        # resetting the counter and publishing the error dict.
+                        result = None
+                    elif error:
+                        # Expected "not supported" reply (e.g. QPIGS2 on a
+                        # single-MPPT inverter): count it as a clean empty
+                        # section, not as a transport failure.
+                        self._failures.on_success(key, cmd)
+                        return {}
+                    else:
+                        self._failures.on_success(key, cmd)
+                        return result
                 if attempt == 0:
                     await asyncio.sleep(self._RETRY_DELAY_S)
 
@@ -229,6 +268,11 @@ class DirectCoordinator(DataUpdateCoordinator):
         try:
             async with async_timeout.timeout(120):
                 cycle = self._cycle
+                # Consume the forced-section set once per cycle. A write
+                # that happens while this cycle is running is picked up by
+                # the next one (the set is not cleared later).
+                forced = self._forced_sections
+                self._forced_sections = set()
 
                 async def fetch_device_data(target):
                     key = target.id
@@ -243,7 +287,7 @@ class DirectCoordinator(DataUpdateCoordinator):
                     # a section or trips its failure counter.
                     sections: dict = {"timestamp": datetime.now()}
                     for cmd, section, cadence in self._CMD_SCHEDULE:
-                        if cycle % cadence == 0:
+                        if cycle % cadence == 0 or section in forced:
                             sections[section] = await fetch_with_retry(
                                 key, uri, cmd, section
                             )

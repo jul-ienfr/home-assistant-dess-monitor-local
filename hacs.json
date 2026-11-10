@@ -1,5 +1,6 @@
 {
-  "name": "DESS Monitor Local",
+  "name": "DESS Monitor Local (Anenji SMG-II)",
   "render_readme": true,
-  "hide_default_branch": false
+  "hide_default_branch": false,
+  "homeassistant": "2024.6.0"
 }

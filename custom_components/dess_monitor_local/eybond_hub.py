@@ -158,7 +158,11 @@ async def async_setup_eybond_hub(hass: HomeAssistant, entry: ConfigEntry) -> Hub
     )
 
     coordinator = DirectCoordinator(hass, entry, targets=targets)
-    await coordinator.async_config_entry_first_refresh()
+    # Do not block entry setup on the first poll: a dongle that is still
+    # cycling would delay Home Assistant's startup. Populate the target list
+    # synchronously so Hub.init() can build its children, then let
+    # async_setup_entry schedule the initial refresh as a background task.
+    coordinator.devices = list(targets)
     hub_obj = Hub(hass, name, coordinator)
     await hub_obj.init()
     entry.runtime_data = hub_obj

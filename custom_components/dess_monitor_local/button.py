@@ -16,12 +16,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from custom_components.dess_monitor_local import HubConfigEntry
+from custom_components.dess_monitor_local.api.adapters.modbus import ModbusAdapter
 from custom_components.dess_monitor_local.api.commands.direct_command_queue import (
     get_command_queue,
-)
-from custom_components.dess_monitor_local.api.protocols.modbus_rtu import (
-    parse_modbus_uri,
-    write_modbus_single_register,
 )
 from custom_components.dess_monitor_local.const import (
     CONF_DEVICE,
@@ -98,19 +95,25 @@ class SMG2ExitFaultButton(ButtonEntity):
         """Issue the Modbus write. Goes through the shared command queue
         so it can't interleave with the coordinator's polling reads —
         SMG-II's RS485 bus is half-duplex and overlapping transactions
-        truncate each other's frames."""
+        truncate each other's frames.
+
+        The adapter transparently handles both transports (``modbus://``
+        and ``eybond-modbus://``), so the button also works for EyBond hub
+        children whose URI is not a plain TCP Modbus endpoint.
+        """
         try:
-            host, port = parse_modbus_uri(self._device_uri)
-        except Exception as err:
-            _LOGGER.warning("Cannot parse Modbus URI %r: %s", self._device_uri, err)
+            adapter = ModbusAdapter(self._device_uri)
+        except Exception as err:  # noqa: BLE001 — malformed stored URI
+            _LOGGER.warning(
+                "Cannot create Modbus adapter for %r: %s",
+                self._device_uri, err,
+            )
             return
 
         queue = await get_command_queue(self._hass, self._device_uri)
 
         async def _do_write() -> dict:
-            return await write_modbus_single_register(
-                host, port, _EXIT_FAULT_REGISTER, 1
-            )
+            return await adapter.write_register(_EXIT_FAULT_REGISTER, 1)
 
         result = await queue.enqueue(_do_write)
         if isinstance(result, dict) and result.get("error"):

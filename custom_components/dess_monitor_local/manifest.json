@@ -8,18 +8,18 @@
     "websocket_api"
   ],
   "codeowners": [
-    "@Antoxa1081"
+    "@jul-ienfr"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/README.md",
+  "documentation": "https://github.com/jul-ienfr/home-assistant-dess-monitor-local/blob/main/README.md",
   "homekit": {},
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/Antoxa1081/home-assistant-dess-monitor-local/issues",
+  "issue_tracker": "https://github.com/jul-ienfr/home-assistant-dess-monitor-local/issues",
   "requirements": [
     "pyserial-asyncio-fast==0.16"
   ],
   "ssdp": [],
-  "version": "1.1.0-beta.3-anenji.1",
+  "version": "1.1.0-beta.3-anenji.2",
   "zeroconf": []
 }

@@ -263,6 +263,22 @@ class TestMultiSession:
 
         asyncio.run(scenario())
 
+    def test_full_18_char_pn_learned_from_heartbeat(self):
+        """The fork must not truncate the PN to the old 14-char slice."""
+        pn = "E50000221162926051"
+        assert len(pn) == 18
+
+        async def scenario():
+            mgr = _new_manager()
+            r, w = _FakeReader(), _FakeWriter(("10.0.0.1", 1111))
+            task = asyncio.create_task(mgr._handle_session(r, w))
+            r.feed(_dongle_heartbeat(pn))
+            await _until(lambda: mgr.identified_pns == [pn])
+            assert mgr._sessions_by_pn[pn].peer == "10.0.0.1:1111"
+            await _drain(mgr, task)
+
+        asyncio.run(scenario())
+
     def test_two_dongles_coexist_no_eviction(self):
         async def scenario():
             mgr = _new_manager()

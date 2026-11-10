@@ -27,7 +27,11 @@ from custom_components.dess_monitor_local.api.commands.direct_commands import (
     parse_device_status_bits_b7_b0,
     parse_device_status_bits_b10_b8,
 )
-from custom_components.dess_monitor_local.const import DOMAIN
+from custom_components.dess_monitor_local.const import (
+    CONF_PROTOCOL,
+    DOMAIN,
+    PROTOCOL_MODBUS,
+)
 from custom_components.dess_monitor_local.coordinators.direct_coordinator import (
     DirectCoordinator,
 )
@@ -59,44 +63,58 @@ async def async_setup_entry(
 ) -> None:
     hub = config_entry.runtime_data
     coordinator = hub.direct_coordinator
+    entry_protocol = config_entry.options.get(CONF_PROTOCOL)
 
     new_entities: list[BinarySensorEntity] = []
     for item in hub.items:
-        for key, suffix, name, dc in _B7_B0_FLAGS:
-            new_entities.append(
-                _StatusBitBinarySensor(
-                    item, coordinator,
-                    raw_field="device_status_bits_b7_b0",
-                    parser=parse_device_status_bits_b7_b0,
-                    flag_key=key,
-                    sensor_suffix=suffix,
-                    name=name,
-                    device_class=dc,
-                )
-            )
-        for key, suffix, name, dc in _B10_B8_FLAGS:
-            new_entities.append(
-                _StatusBitBinarySensor(
-                    item, coordinator,
-                    raw_field="device_status_bits_b10_b8",
-                    parser=parse_device_status_bits_b10_b8,
-                    flag_key=key,
-                    sensor_suffix=suffix,
-                    name=name,
-                    device_class=dc,
-                )
-            )
+        item_protocol = getattr(item, "protocol", None) or entry_protocol
+        is_modbus = item_protocol == PROTOCOL_MODBUS
 
-        # Inverter warnings/faults (QPIWS for PI30, QFWS for PI18).
-        new_entities.append(_AnyWarningBinarySensor(item, coordinator))
-        for key, suffix, name, dc in _QPIWS_WARNINGS:
-            new_entities.append(
-                _WarningFlagBinarySensor(
-                    item, coordinator,
-                    flag_key=key, sensor_suffix=suffix,
-                    name=name, device_class=dc,
+        if not is_modbus:
+            # QPIGS status bits do not exist on SMG-II; the projection used
+            # to invent "00010000"/"010". Don't create entities for data the
+            # inverter never sent.
+            for key, suffix, name, dc in _B7_B0_FLAGS:
+                new_entities.append(
+                    _StatusBitBinarySensor(
+                        item, coordinator,
+                        raw_field="device_status_bits_b7_b0",
+                        parser=parse_device_status_bits_b7_b0,
+                        flag_key=key,
+                        sensor_suffix=suffix,
+                        name=name,
+                        device_class=dc,
+                    )
                 )
-            )
+            for key, suffix, name, dc in _B10_B8_FLAGS:
+                new_entities.append(
+                    _StatusBitBinarySensor(
+                        item, coordinator,
+                        raw_field="device_status_bits_b10_b8",
+                        parser=parse_device_status_bits_b10_b8,
+                        flag_key=key,
+                        sensor_suffix=suffix,
+                        name=name,
+                        device_class=dc,
+                    )
+                )
+
+        # Aggregate warning sensor works for every protocol: SMG-II feeds
+        # fault_code/warning_code through the QPIWS/QFWS projections.
+        new_entities.append(_AnyWarningBinarySensor(item, coordinator))
+
+        if not is_modbus:
+            # The per-bit QPIWS/QFWS flags are not decoded for SMG-II (the
+            # published map only defines raw 32-bit codes), so those
+            # entities would stay unknown forever.
+            for key, suffix, name, dc in _QPIWS_WARNINGS:
+                new_entities.append(
+                    _WarningFlagBinarySensor(
+                        item, coordinator,
+                        flag_key=key, sensor_suffix=suffix,
+                        name=name, device_class=dc,
+                    )
+                )
 
     if new_entities:
         async_add_entities(new_entities)

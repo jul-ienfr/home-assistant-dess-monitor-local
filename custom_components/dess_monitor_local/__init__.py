@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -57,8 +55,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     else:
         await _migrate_data_to_options(hass, entry)
         direct_coordinator_ctx = DirectCoordinator(hass, entry)
-        await asyncio.gather(
-            direct_coordinator_ctx.async_config_entry_first_refresh()
+        # Resolve the poll targets without performing the first poll. A slow
+        # or cycling dongle must not block Home Assistant startup (the
+        # watchdog logs "Waiting on integrations to complete setup" and may
+        # abort the entry). Entities are created immediately and fill in on
+        # the background refresh scheduled below.
+        direct_coordinator_ctx.devices = (
+            await direct_coordinator_ctx.get_active_devices()
         )
         entry.runtime_data = hub.Hub(hass, entry.data["name"], direct_coordinator_ctx)
         await entry.runtime_data.init()
@@ -66,8 +69,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     # This creates each HA object for each platform your device requires.
     # It's done by calling the `async_setup_entry` function in each platform module.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await asyncio.gather(
+    # Run the first poll outside the entry-setup path. `async_refresh`
+    # records failure in the coordinator instead of raising, and the task is
+    # owned by the config entry so it is cancelled on unload/reload.
+    entry.async_create_background_task(
+        hass,
         entry.runtime_data.direct_coordinator.async_refresh(),
+        name="dess_monitor_local_first_refresh",
     )
     entry.async_on_unload(entry.add_update_listener(_update_listener))
     return True
