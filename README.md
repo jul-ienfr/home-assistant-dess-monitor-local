@@ -90,8 +90,8 @@ DE/RE.
 
 ```powershell
 # 1. Cloner le dépôt
-git clone https://github.com/VOTRE_USER/anenji-esphome.git
-cd anenji-esphome
+git clone https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
+cd home-assistant-dess-monitor-local
 
 # 2. Créer les secrets
 Copy-Item secrets.yaml.example secrets.yaml
