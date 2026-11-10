@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0-beta.4-anenji.1 — 2026-11-10
 
 ### Added
 
