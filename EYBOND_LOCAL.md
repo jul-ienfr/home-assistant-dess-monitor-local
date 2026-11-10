@@ -212,21 +212,22 @@ Deux dépôts sont utilisables :
 | **Fork Anenji** (recommandé) | `1.1.0-beta.3-anenji.3` | beta.3 + SUB + PN complet + SOC réel + démarrage non bloquant |
 | Upstream | `v1.1.0-beta.3` | beta.3 non corrigée |
 
-Le fork est publié ici :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
+Le fork est archivé ici :
+<https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local>
+(branche `archive/dess-monitor-local`, tag `v1.1.0-beta.3-anenji.3`).
 
 Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
 § 7.4, les valeurs réelles de SOC et de puissance apparente, la gestion des
 NAK et le démarrage non bloquant. Le transport Eybond reste celui de
 l'upstream.
 
-Via HACS :
+La branche `main` de ce dépôt contient désormais le projet ESPHome Anenji et
+non plus l'intégration. Pour installer l'intégration :
 
-1. HACS → Intégrations → menu ⋮ → **Dépôts personnalisés**.
-2. Ajouter `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`
-   avec la catégorie **Integration**.
-3. Ouvrir la fiche et installer la version disponible (branche `main`).
-4. Redémarrer Home Assistant.
+1. soit installer l'upstream `v1.1.0-beta.3` puis appliquer le patch du § 7.4.1 ;
+2. soit copier manuellement le dossier `custom_components/dess_monitor_local`
+   depuis la branche `archive/dess-monitor-local`, puis redémarrer Home
+   Assistant.
 
 Pour rester sur l'upstream, ajouter à la place
 `https://github.com/Antoxa1081/home-assistant-dess-monitor-local`, activer les
@@ -387,13 +388,18 @@ SUB et le PN complet.
 
 ### 7.4.1 Faut-il créer un fork ?
 
-Non, il est déjà publié :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
+Non, il est déjà archivé :
+<https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local>
 
-La branche `main` contient la beta.3 upstream, le correctif SUB et le PN
-complet, ainsi que les correctifs de la version
+La branche `archive/dess-monitor-local` contient la beta.3 upstream, le
+correctif SUB et le PN complet, ainsi que les correctifs de la version
 `1.1.0-beta.3-anenji.3`. Le tag `v1.1.0-beta.3-anenji.3` marque exactement
 cette version. Aucun fork supplémentaire n'est nécessaire.
+
+La branche `main` du dépôt ne contient plus l'intégration mais le projet
+ESPHome Anenji : HACS, qui suit la branche par défaut, ne peut donc plus
+l'installer directement. Utiliser l'upstream + patch ci-dessous, ou copier le
+dossier `custom_components/dess_monitor_local` depuis la branche d'archive.
 
 Pour ceux qui préfèrent rester sur le dépôt upstream, le patch reste
 applicable. Copier d'abord `patches/dess-monitor-local-beta3-anenji.patch`
@@ -474,8 +480,9 @@ logger:
 
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant d'origine.
-- [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-  — beta.3 + SUB + PN complet + SOC réel, utilisé pour ce site.
+- [Fork Anenji (archivé)](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
+  — beta.3 + SUB + PN complet + SOC réel, sur la branche
+  `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
 - [Documentation EyBond du projet](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/wiki/EyBond-Transport-Setup.md)
   — transport inverse, Docker et dépannage.
 - [`PROTOCOL.md`](PROTOCOL.md) — carte des registres SMG-II.

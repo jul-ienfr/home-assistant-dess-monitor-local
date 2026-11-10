@@ -1,5 +1,12 @@
 # Anenji ESPHome — Onduleur Van Master
 
+> **Dépôt** : ce projet est hébergé sur
+> [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local).
+> La branche `main` contient le firmware ESPHome. L'ancien fork de
+> l'intégration DESS Monitor Local est conservé sur la branche
+> [`archive/dess-monitor-local`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
+> (tag `v1.1.0-beta.3-anenji.3`).
+
 Firmware ESPHome pour surveiller et piloter un onduleur solaire hybride
 **Anenji / EASUN / ISolar SMG-II** (4,2 kW / 6,2 kW) via Modbus RTU, depuis Home
 Assistant ou en autonomie.
@@ -220,8 +227,9 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
 - [attilagyurman/anenji-local-modbus](https://github.com/attilagyurman/anenji-local-modbus)
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
-- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-  — beta.3 avec SUB, PN complet et SOC réel, prête pour HACS.
+- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
+  — beta.3 avec SUB, PN complet et SOC réel, archivé sur la branche
+  `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
 - [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
 
 ## Licence
