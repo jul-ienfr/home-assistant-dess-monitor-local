@@ -29,7 +29,7 @@ jobs:
         with:
           category: integration
           # Fork constraints: upstream declares no license, and the GitHub
-          # description/topics/brands/assets are maintained outside this
-          # repository. The repository structure, hacs.json and manifest are
-          # still validated.
-          ignore: brands description license topics information images
+          # description/topics/issues/asset settings are maintained outside
+          # this repository. The repository structure, hacs.json and manifest
+          # are still validated.
+          ignore: brands description license topics issues information images
