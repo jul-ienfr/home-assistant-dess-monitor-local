@@ -6,6 +6,12 @@
 >
 > Fork: <https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
 > Upstream: <https://github.com/Antoxa1081/home-assistant-dess-monitor-local>
+>
+> **Repository layout**: the default branch is `archive/dess-monitor-local`
+> and contains this integration (`hacs.json`, `custom_components/`). The
+> `main` branch contains the Anenji ESPHome firmware, not this integration.
+> Marketplace metadata and release rules:
+> <https://github.com/jul-ienfr/home-assistant-dess-monitor-local/blob/main/MARKETPLACE.md>
 
 ## What this fork changes
 
@@ -71,7 +77,32 @@ class, and output apparent power now uses the VA unit instead of W.
 
 ## Installation
 
-### HACS (recommended)
+### Marketplace (recommended, Home Assistant 2026.11+)
+
+HACS is built into Home Assistant 2026.11 as the **Marketplace**. The old
+“Get HACS” add-on is obsolete and should be removed.
+
+1. Open **Settings → Marketplace**.
+2. In the upper-right corner, select **Add from link**.
+3. Enter
+   `https://github.com/jul-ienfr/home-assistant-dess-monitor-local` and add
+   it. Choose **Integration** if the type is requested.
+4. Open the repository, select **Install**, and choose the version
+   `v1.1.0-beta.3-anenji.3`.
+5. The integration has a config flow and loads immediately. If a restart is
+   requested, restart Home Assistant, then add it under
+   **Settings → Devices & services**.
+
+The Marketplace installs the latest **published GitHub release**, not a bare
+tag. The version in `manifest.json` must match the tag. The repository's
+default branch (`archive/dess-monitor-local`) contains `hacs.json` and
+`custom_components/`, so the Marketplace can resolve the repository directly.
+Future releases must be published on that branch; see
+[`MARKETPLACE.md`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/blob/main/MARKETPLACE.md).
+
+Requires Home Assistant **2024.6.0** or newer.
+
+### HACS before Home Assistant 2026.11 (legacy)
 
 1. Open **HACS → Integrations → ⋮ → Custom repositories**.
 2. Add
@@ -81,13 +112,19 @@ class, and output apparent power now uses the VA unit instead of W.
    Assistant.
 4. Add the integration and configure the protocol/transport.
 
-Requires Home Assistant **2024.6.0** or newer.
-
 ### Manual
 
 Copy `custom_components/dess_monitor_local` into your Home Assistant
-`config/custom_components/` directory and restart. HACS is preferable: it
-handles updates and the `pyserial-asyncio-fast` requirement.
+`config/custom_components/` directory and restart. The Marketplace is
+preferable: it handles updates and the `pyserial-asyncio-fast` requirement.
+
+### Modbus bus conflict
+
+The SMG-II has a single Modbus bus. Do **not** configure this integration with
+the `serial` or `modbus` transport on a port that another master is already
+polling. In particular, do not run it alongside the ESPHome `Anenji 4000w
+Master` node on the same inverter COM port. Use the `eybond` transport of the
+Wi-Fi dongle or the Eybond hub, or disable the other master first.
 
 ## Configuration
 

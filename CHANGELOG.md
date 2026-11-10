@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Default branch is now `archive/dess-monitor-local`, which keeps `hacs.json`
+  and `custom_components/` together for the Home Assistant 2026.11
+  Marketplace (formerly HACS).
+- Installation instructions updated for **Settings → Marketplace → Add from
+  link**; the legacy HACS path is kept for Home Assistant versions before
+  2026.11.
+- Added the single-Modbus-master warning: do not use the `serial`/`modbus`
+  transport while ESPHome is polling the same inverter port.
+
 ## 1.1.0-beta.3-anenji.3 — 2026-11-10
 
 ### Fixed
