@@ -163,7 +163,7 @@ class InverterOutputPrioritySelect(SelectBase):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
         self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['UtilityFirst', 'SBU', 'Solar']
+        self._attr_options = ['UtilityFirst', 'SBU', 'Solar', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data.get(self._inverter_device.inverter_id) or {}
@@ -182,6 +182,7 @@ class InverterOutputPrioritySelect(SelectBase):
             'SBU': 'SBU',
             'Solar': 'Solar',
             'SolarFirst': 'Solar',
+            'SUB': 'SUB',
         }
         priority = resolve_output_priority(data)
         mapped_priority = mapper.get(priority, priority)
@@ -194,6 +195,7 @@ class InverterOutputPrioritySelect(SelectBase):
                 'UtilityFirst': OutputSourcePrioritySetting.UTILITY_FIRST,
                 'SBU': OutputSourcePrioritySetting.SBU_PRIORITY,
                 'Solar': OutputSourcePrioritySetting.SOLAR_FIRST,
+                'SUB': OutputSourcePrioritySetting.SUB_PRIORITY,
             }
             queue = await get_command_queue(self.hass, self._inverter_device.device_data)
             await queue.enqueue(

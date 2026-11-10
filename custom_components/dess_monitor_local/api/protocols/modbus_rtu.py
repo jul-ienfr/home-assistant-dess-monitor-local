@@ -422,6 +422,7 @@ _OUTPUT_PRIORITY_MAP = {
     0: OutputSourcePriority.UtilityFirst.name,
     1: OutputSourcePriority.SolarFirst.name,
     2: OutputSourcePriority.SBU.name,
+    3: OutputSourcePriority.SUB.name,
 }
 
 _CHARGER_PRIORITY_MAP = {

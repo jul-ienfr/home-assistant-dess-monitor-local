@@ -697,7 +697,13 @@ class EybondManager:
                     })
 
                 if h.fcode == FC_HEARTBEAT:
-                    pn = payload[:14].decode("ascii", errors="replace").strip("\x00")
+                    raw_pn = bytearray()
+                    for byte in payload:
+                        if 0x20 <= byte < 0x7F:
+                            raw_pn.append(byte)
+                        else:
+                            break
+                    pn = raw_pn.decode("ascii", errors="replace")
                     if pn and not sess.pn:
                         sess.pn = pn
                         # Same physical dongle reconnecting? Evict the stale

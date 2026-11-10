@@ -34,6 +34,7 @@ class OutputSourcePriority(Enum):
     UtilityFirst = "0"
     SolarFirst = "1"
     SBU = "2"
+    SUB = "3"
     BatteryOnly = "4"
     UtilityOnly = "5"
     SolarAndUtility = "6"
@@ -126,6 +127,7 @@ class OutputSourcePrioritySetting(Enum):
     UTILITY_FIRST = "POP00"
     SOLAR_FIRST = "POP01"
     SBU_PRIORITY = "POP02"
+    SUB_PRIORITY = "POP03"
 
 
 class ChargeSourcePrioritySetting(Enum):
