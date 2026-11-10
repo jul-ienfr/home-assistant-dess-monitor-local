@@ -202,7 +202,8 @@ Home Assistant et l'onduleur.
 Sans aucun matériel supplémentaire, on peut passer par le compte cloud :
 
 - application SmartESS / SolarMAN du dongle ;
-- intégration HACS ou pont MQTT qui interroge l'API du fabricant ;
+- intégration Marketplace (ex-HACS) ou pont MQTT qui interroge l'API du
+  fabricant ;
 - certains projets, comme `anenji-ha-bridge`, exposent les mesures en MQTT.
 
 Limites à connaître :

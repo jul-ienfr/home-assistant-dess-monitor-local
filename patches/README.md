@@ -13,15 +13,15 @@ Le patch ne modifie pas le transport Eybond ni les lectures. Il a été vérifi�
 sur le dongle du site : PN complet extrait, écriture FC16 de SUB acceptée
 (écriture de la valeur déjà présente, donc sans changement de mode).
 
-Une version déjà corrigée est archivée dans le dépôt
+Une version déjà corrigée est publiée dans le dépôt
 [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-sur la branche
+dont la branche par défaut est
 [`archive/dess-monitor-local`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
 (tag `v1.1.0-beta.3-anenji.3`). Elle contient ce correctif SUB / PN complet,
 plus le SOC et la puissance apparente réels, la gestion des NAK, le démarrage
 non bloquant et les entités vSoC résolues par registre. La branche `main` de ce
-dépôt contient désormais le projet ESPHome Anenji. Le patch reste utile pour
-rester sur le dépôt upstream.
+dépôt contient le projet ESPHome Anenji. Le patch reste utile pour rester sur
+le dépôt upstream.
 
 Application, depuis `/config` :
 
@@ -39,5 +39,5 @@ Redémarrer Home Assistant après l'application. Si un onduleur enfant a déjà 
 configuré avec l'ancien PN tronqué, le supprimer et le reconfigurer : le PN
 complet devient la clé de routage.
 
-Une mise à jour HACS de l'intégration écrase les fichiers ; réappliquer le
-patch après la mise à jour, ou utiliser directement le fork.
+Une mise à jour via le Marketplace (ex-HACS) écrase les fichiers ; réappliquer
+le patch après la mise à jour, ou utiliser directement le fork.

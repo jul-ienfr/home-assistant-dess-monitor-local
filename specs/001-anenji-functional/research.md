@@ -42,7 +42,8 @@ comparaison avec des projets publics.
 7. **Millerderek/anenji-ha-bridge** — https://github.com/Millerderek/anenji-ha-bridge
    Intégration Home Assistant avec pont local ; montre les attentes d'entités.
 8. **groove-max/ha-eybond-local** — https://github.com/groove-max/ha-eybond-local
-   Intégration HACS pour les collecteurs EyeBond/SmartESS ; utile pour comprendre
+   Intégration Marketplace (ex-HACS) pour les collecteurs EyeBond/SmartESS ;
+   utile pour comprendre
    les variantes de passerelles cloud.
 9. **GitHub Spec Kit** — https://github.com/github/spec-kit
    Méthodologie utilisée pour structurer cette évolution.

@@ -2,10 +2,13 @@
 
 > **Dépôt** : ce projet est hébergé sur
 > [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local).
-> La branche `main` contient le firmware ESPHome. L'ancien fork de
-> l'intégration DESS Monitor Local est conservé sur la branche
-> [`archive/dess-monitor-local`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
-> (tag `v1.1.0-beta.3-anenji.3`).
+> La branche **par défaut** est
+> [`archive/dess-monitor-local`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local) :
+> elle contient l'intégration DESS Monitor Local pour le Marketplace
+> (ex-HACS), tag `v1.1.0-beta.3-anenji.3`. Le firmware ESPHome décrit ici est
+> sur la branche
+> [`main`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/main).
+> Format Marketplace et publication : [MARKETPLACE.md](MARKETPLACE.md).
 
 Firmware ESPHome pour surveiller et piloter un onduleur solaire hybride
 **Anenji / EASUN / ISolar SMG-II** (4,2 kW / 6,2 kW) via Modbus RTU, depuis Home
@@ -96,8 +99,8 @@ DE/RE.
 ## Démarrage rapide
 
 ```powershell
-# 1. Cloner le dépôt
-git clone https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
+# 1. Cloner le dépôt (la branche par défaut contient l'intégration)
+git clone -b main https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
 cd home-assistant-dess-monitor-local
 
 # 2. Créer les secrets
@@ -136,6 +139,12 @@ voies existent :
    est proche de l'onduleur.
 4. **Cloud fabricant** (SmartESS/SolarMAN), sans matériel mais avec latence et
    dépendance à Internet.
+
+L'intégration **DESS Monitor Local** s'installe depuis le Marketplace
+(`Paramètres → Marketplace`) et utilise le transport `eybond` du dongle. Ne
+pas la configurer en `serial`/`modbus` sur le port déjà interrogé par
+l'ESP32 : un seul maître Modbus à la fois. Voir
+[`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) et [`MARKETPLACE.md`](MARKETPLACE.md).
 
 Le dongle Wi-Fi d'origine n'expose pas Modbus TCP sur son IP (ports 502 et 8899
 fermés). Il peut néanmoins être détourné du cloud vers Home Assistant via son
@@ -198,6 +207,7 @@ WIRING.md                    # câblage RS232 / RS485
 PROTOCOL.md                  # carte de registres SMG-II
 REMOTE_ACCESS.md             # contrôle sans ESP32 (comparaison des voies)
 EYBOND_LOCAL.md              # contrôle via le dongle Wi-Fi d'origine
+MARKETPLACE.md               # format Marketplace (ex-HACS) et publication
 tools/                       # diagnostic et audit Eybond (lecture + écritures sûres)
 patches/                     # correctif optionnel pour DESS Monitor Local beta.3
 legacy/                      # anciennes configurations (avertissement)
@@ -228,7 +238,7 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
 - [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
-  — beta.3 avec SUB, PN complet et SOC réel, archivé sur la branche
+  — beta.3 avec SUB, PN complet et SOC réel, sur la branche par défaut
   `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
 - [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
 

@@ -195,7 +195,9 @@ Bornes resserrées après l'audit :
 
 - Home Assistant sur `192.168.68.60` (ou l'instance choisie), accessible depuis
   le dongle.
-- HACS installé, ou accès au dossier `config/custom_components`.
+- Marketplace disponible (Home Assistant 2026.11+), ou accès au dossier
+  `config/custom_components`. HACS est intégré au Marketplace depuis 2026.11 ;
+  l'application « Get HACS » n'est plus nécessaire.
 - Port TCP `8899` libre sur l'hôte Home Assistant.
 - Un seul maître sur le bus RS485 : si l'ESP32 `192.168.68.62` est encore
   câblé au même port COM, le débrancher ou désactiver son polling avant de
@@ -212,8 +214,8 @@ Deux dépôts sont utilisables :
 | **Fork Anenji** (recommandé) | `1.1.0-beta.3-anenji.3` | beta.3 + SUB + PN complet + SOC réel + démarrage non bloquant |
 | Upstream | `v1.1.0-beta.3` | beta.3 non corrigée |
 
-Le fork est archivé ici :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local>
+Le fork est la branche **par défaut** du dépôt :
+<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
 (branche `archive/dess-monitor-local`, tag `v1.1.0-beta.3-anenji.3`).
 
 Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
@@ -221,21 +223,42 @@ Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
 NAK et le démarrage non bloquant. Le transport Eybond reste celui de
 l'upstream.
 
-La branche `main` de ce dépôt contient désormais le projet ESPHome Anenji et
-non plus l'intégration. Pour installer l'intégration :
+Depuis Home Assistant 2026.11, HACS est intégré sous le nom **Marketplace**
+(`Paramètres → Marketplace`). L'application « Get HACS » n'est plus nécessaire
+et doit être retirée. Le Marketplace lit `hacs.json` et
+`custom_components/dess_monitor_local/` sur la branche par défaut.
 
-1. soit installer l'upstream `v1.1.0-beta.3` puis appliquer le patch du § 7.4.1 ;
-2. soit copier manuellement le dossier `custom_components/dess_monitor_local`
-   depuis la branche `archive/dess-monitor-local`, puis redémarrer Home
-   Assistant.
+Via Marketplace :
+
+1. `Paramètres → Marketplace`.
+2. En haut à droite, **Add from link** / **Ajouter depuis un lien**.
+3. Coller `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`,
+   puis choisir **Integration** si le type est demandé.
+4. Ouvrir la fiche du dépôt, **Install**, et sélectionner la version
+   `v1.1.0-beta.3-anenji.3`.
+5. L'intégration a un config flow : elle se charge immédiatement. Sinon,
+   redémarrer Home Assistant, puis l'ajouter dans
+   `Paramètres → Appareils et services`.
+
+Le Marketplace installe la dernière **release GitHub publiée**, pas un simple
+tag. La version de `manifest.json` doit être identique au tag. Toute nouvelle
+version doit donc être publiée sur la branche `archive/dess-monitor-local` ;
+voir [`MARKETPLACE.md`](MARKETPLACE.md).
 
 Pour rester sur l'upstream, ajouter à la place
 `https://github.com/Antoxa1081/home-assistant-dess-monitor-local`, activer les
 préversions et installer `v1.1.0-beta.3`, puis appliquer le patch du § 7.4.1.
 
-Installation manuelle : télécharger l'archive du dépôt, puis copier le dossier
+Installation manuelle : télécharger l'archive de la branche
+`archive/dess-monitor-local`, puis copier le dossier
 `custom_components/dess_monitor_local` dans `/config/custom_components/`, et
 redémarrer Home Assistant.
+
+> **Un seul maître sur le bus Modbus.** Ne pas créer une entrée avec le
+> transport `serial` ou `modbus` sur le port COM déjà interrogé par l'ESPHome :
+> deux maîtres se marcheraient dessus. Utiliser le transport `eybond` du
+> dongle Wi-Fi, le hub Eybond multi-dongles, ou désactiver le polling de
+> l'ESP32 avant de continuer.
 
 > **Changement de PN** : le fork lit le PN complet (18 caractères). Si un
 > onduleur enfant a déjà été créé avec l'ancien PN tronqué (14 caractères),
@@ -394,12 +417,13 @@ Non, il est déjà archivé :
 La branche `archive/dess-monitor-local` contient la beta.3 upstream, le
 correctif SUB et le PN complet, ainsi que les correctifs de la version
 `1.1.0-beta.3-anenji.3`. Le tag `v1.1.0-beta.3-anenji.3` marque exactement
-cette version. Aucun fork supplémentaire n'est nécessaire.
+cette version. Cette branche est la branche par défaut du dépôt et contient
+`hacs.json` et `custom_components/`, donc le Marketplace peut l'installer
+directement. Aucun fork supplémentaire n'est nécessaire.
 
-La branche `main` du dépôt ne contient plus l'intégration mais le projet
-ESPHome Anenji : HACS, qui suit la branche par défaut, ne peut donc plus
-l'installer directement. Utiliser l'upstream + patch ci-dessous, ou copier le
-dossier `custom_components/dess_monitor_local` depuis la branche d'archive.
+La branche `main` du dépôt contient le projet ESPHome Anenji ; elle n'est plus
+la branche par défaut. Une nouvelle release de l'intégration doit être taguée
+sur `archive/dess-monitor-local`, pas sur `main`.
 
 Pour ceux qui préfèrent rester sur le dépôt upstream, le patch reste
 applicable. Copier d'abord `patches/dess-monitor-local-beta3-anenji.patch`
@@ -417,9 +441,9 @@ cd /config
 git apply patches/dess-monitor-local-beta3-anenji.patch
 ```
 
-Redémarrer Home Assistant après l'application. Une mise à jour HACS de
-l'intégration écrase les fichiers : il faudra réappliquer le patch ou passer à
-une version upstream qui l'intègre.
+Redémarrer Home Assistant après l'application. Une mise à jour via le
+Marketplace (ex-HACS) écrase les fichiers : il faudra réappliquer le patch ou
+passer à une version upstream qui l'intègre.
 
 > **À faire avant de configurer l'onduleur enfant** : le patch remplace le PN
 > tronqué par le PN complet comme clé de routage. Si un enfant a déjà été créé
@@ -480,8 +504,8 @@ logger:
 
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant d'origine.
-- [Fork Anenji (archivé)](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
-  — beta.3 + SUB + PN complet + SOC réel, sur la branche
+- [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
+  — beta.3 + SUB + PN complet + SOC réel, branche par défaut
   `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
 - [Documentation EyBond du projet](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/wiki/EyBond-Transport-Setup.md)
   — transport inverse, Docker et dépannage.
