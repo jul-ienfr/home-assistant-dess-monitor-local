@@ -94,7 +94,8 @@ HACS is built into Home Assistant 2026.11 as the **Marketplace**. The old
    **Settings → Devices & services**.
 
 The Marketplace installs the latest **published GitHub release**, not a bare
-tag. The version in `manifest.json` must match the tag. The repository's
+tag. The version in `manifest.json` must match the tag without its `v` prefix.
+The repository's
 default branch (`archive/dess-monitor-local`) contains `hacs.json` and
 `custom_components/`, so the Marketplace can resolve the repository directly.
 Future releases must be published on that branch; see
