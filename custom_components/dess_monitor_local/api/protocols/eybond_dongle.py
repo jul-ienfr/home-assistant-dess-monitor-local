@@ -104,6 +104,14 @@ REDISCOVERY_WINDOW = 60.0
 # with 3s heartbeats too, so the fast cadence bought nothing but 20x the
 # traffic. The heartbeat frame is byte-identical to the reference's.
 HEARTBEAT_INTERVAL = 60.0
+# A half-open TCP session can survive a Wi-Fi drop or a dongle reboot: writes
+# succeed into the kernel buffer, so the heartbeat task never sees an error and
+# the announcer stays paused because the manager still believes a dongle is
+# connected. The dongle only reconnects after a new ``set>server`` beacon, so
+# the whole integration stays dead until HA is reloaded. Drop any session that
+# has not delivered a single frame for this long; that clears the connected
+# set and lets the announcer bring the dongle back.
+SESSION_STALE_AFTER = 90.0
 # Cap on how long an FC=4 forward waits for the inverter's reply, regardless of
 # the (larger) per-command timeout the coordinator passes. Matches the
 # reference's 5s request timeout: a connected dongle answers in well under a
@@ -335,6 +343,8 @@ class _Session:
     pending: dict[int, asyncio.Future] = field(default_factory=dict)
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     hb_task: asyncio.Task | None = None
+    # Monotonic timestamp of the last frame received from this dongle.
+    last_rx: float = field(default_factory=time.monotonic)
 
     def next_tid(self) -> int:
         self._tid = (self._tid + 1) & 0xFFFF
@@ -439,6 +449,30 @@ class EybondManager:
         sess.pending.clear()
         if not self._sessions:
             self._any_ready.clear()
+
+    def _drop_if_stale(self, sess: _Session) -> bool:
+        """Drop a half-open session that has delivered nothing for too long.
+
+        TCP writes to a dead peer can keep succeeding for a long time, so the
+        session never looks disconnected to the read loop or the heartbeat
+        task. While it stays in ``_sessions`` the announcer is paused and the
+        dongle never receives a new ``set>server`` beacon — the integration
+        stays dead until a reload. Removing the session resumes discovery.
+        """
+        idle = time.monotonic() - sess.last_rx
+        if idle < SESSION_STALE_AFTER:
+            return False
+        _LOGGER.warning(
+            "EyBond: session %s (PN=%s) received nothing for %.0fs — "
+            "dropping stale session and re-announcing",
+            sess.peer, sess.pn or "?", idle,
+        )
+        try:
+            sess.writer.close()
+        except Exception:
+            pass
+        self._drop_session(sess, f"stale session: no frame for {idle:.0f}s")
+        return True
 
     async def ensure_started(self) -> None:
         loop = asyncio.get_running_loop()
@@ -684,6 +718,8 @@ class EybondManager:
                 payload = b""
                 if h.payload_len > 0:
                     payload = await reader.readexactly(h.payload_len)
+                # Any frame proves the TCP path is alive, not just a heartbeat.
+                sess.last_rx = time.monotonic()
 
                 _LOGGER.debug(
                     "EyBond RX [%s] tid=%d fc=%d devaddr=%d len=%d payload=%s",
@@ -822,6 +858,8 @@ class EybondManager:
                     except Exception:
                         pass
                     return
+                if self._drop_if_stale(sess):
+                    return
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
@@ -931,7 +969,12 @@ class EybondManager:
             except TimeoutError:
                 sess.pending.pop(tid, None)
                 # No reply within the cap — usual when the dongle clean-closed
-                # mid-poll; it reconnects and the next cycle succeeds.
+                # mid-poll; it reconnects and the next cycle succeeds. If the
+                # session has been silent far longer than a clean-close cycle,
+                # it is half-open: drop it so the announcer can recover it.
+                if self._drop_if_stale(sess):
+                    _log("stale_session", target_pn=sess.pn or pn)
+                    return None
                 _LOGGER.debug(
                     "EyBond: %s devaddr=%d tid=%d TIMEOUT after %.1fs",
                     context or "frame", devaddr, tid, resp_timeout,

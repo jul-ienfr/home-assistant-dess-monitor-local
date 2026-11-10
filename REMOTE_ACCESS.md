@@ -91,7 +91,7 @@ utilisée est **DESS Monitor Local** en mode « EyBond hub ».
 Limites à connaître : le cloud SmartESS est hors ligne pendant le contrôle
 local et un seul processus peut écouter sur 8899. La beta.3 upstream tronque
 le PN à 14 caractères et ne mappe pas le mode de sortie SUB (registre 301 =
-3) ; le fork actuel (`1.1.0-beta.4-anenji.1`) corrige ces deux points.
+3) ; le fork actuel (`1.1.0-beta.4-anenji.2`) corrige ces deux points.
 
 Procédure complète, valeurs mesurées et dépannage :
 [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).

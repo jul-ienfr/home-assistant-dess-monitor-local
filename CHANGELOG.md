@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.2 — 2026-11-10
+
+### Fixed
+
+- **The Eybond dongle now recovers from a half-open TCP session.** After a
+  Home Assistant reload or restart, a dongle connection can stay open at the
+  TCP level while no frame comes back. Writes keep succeeding, so the
+  heartbeat task sees no error and the announcer stays paused because the
+  manager still counts the dongle as connected. Polling then times out
+  forever until Home Assistant is restarted. The manager now drops any
+  session that has received no frame for 90 seconds, which clears the
+  connected set and lets the existing announce loop bring the dongle back
+  automatically.
+
+### Notes
+
+- Restart Home Assistant after installing this release. Copying the files
+  alone leaves the previously imported module in memory, so new entities and
+  fixes only take effect after a restart.
+
 ## 1.1.0-beta.4-anenji.1 — 2026-11-10
 
 ### Added

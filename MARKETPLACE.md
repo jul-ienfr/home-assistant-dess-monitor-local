@@ -82,7 +82,7 @@ branche d'intégration séparée.
    (ou `jul-ienfr/home-assistant-dess-monitor-local`) et valider.
 4. Choisir **Integration** si le type est demandé.
 5. Ouvrir la fiche, **Install**, puis sélectionner la version
-   `v1.1.0-beta.4-anenji.1`.
+   `v1.1.0-beta.4-anenji.2`.
 
 Une intégration avec config flow se charge immédiatement après l'installation.
 Les mises à jour et les suppressions nécessitent un redémarrage, proposé par
@@ -106,7 +106,7 @@ délai de quelques heures est donc normal.
 3. Incrémenter `version` dans
    `custom_components/dess_monitor_local/manifest.json`. Cette valeur doit
    correspondre au futur tag, sans le préfixe `v` (par exemple manifest
-   `1.1.0-beta.4-anenji.1` pour le tag `v1.1.0-beta.4-anenji.1`).
+   `1.1.0-beta.4-anenji.2` pour le tag `v1.1.0-beta.4-anenji.2`).
 4. Committer et pousser :
 
    ```bash

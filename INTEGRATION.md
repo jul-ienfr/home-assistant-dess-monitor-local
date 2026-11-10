@@ -142,7 +142,7 @@ HACS is built into Home Assistant 2026.11 as the **Marketplace**. The old
    `https://github.com/jul-ienfr/home-assistant-dess-monitor-local` and add
    it. Choose **Integration** if the type is requested.
 4. Open the repository, select **Install**, and choose the version
-   `v1.1.0-beta.4-anenji.1`.
+   `v1.1.0-beta.4-anenji.2`.
 5. The integration has a config flow and loads immediately. If a restart is
    requested, restart Home Assistant, then add it under
    **Settings → Devices & services**.

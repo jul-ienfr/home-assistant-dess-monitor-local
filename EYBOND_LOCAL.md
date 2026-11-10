@@ -211,12 +211,12 @@ Deux dépôts sont utilisables :
 
 | Dépôt | Version | Contenu |
 |-------|---------|---------|
-| **Fork Anenji** (recommandé) | `1.1.0-beta.4-anenji.1` | beta.3 + SUB + PN complet + SOC réel + pilotage complet |
+| **Fork Anenji** (recommandé) | `1.1.0-beta.4-anenji.2` | beta.3 + SUB + PN complet + SOC réel + pilotage complet |
 | Upstream | `v1.1.0-beta.3` | beta.3 non corrigée |
 
 Le fork est intégré à la branche `main` du dépôt :
 <https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
-(release `v1.1.0-beta.4-anenji.1`).
+(release `v1.1.0-beta.4-anenji.2`).
 
 Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
 § 7.4, les valeurs réelles de SOC et de puissance apparente, la gestion des
@@ -235,7 +235,7 @@ Via Marketplace :
 3. Coller `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`,
    puis choisir **Integration** si le type est demandé.
 4. Ouvrir la fiche du dépôt, **Install**, et sélectionner la version
-   `v1.1.0-beta.4-anenji.1`.
+   `v1.1.0-beta.4-anenji.2`.
 5. L'intégration a un config flow : elle se charge immédiatement. Sinon,
    redémarrer Home Assistant, puis l'ajouter dans
    `Paramètres → Appareils et services`.
@@ -501,7 +501,7 @@ logger:
   — intégration Home Assistant d'origine.
 - [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
   — beta.3 + SUB + PN complet + SOC réel, intégré sur `main`
-  (release `v1.1.0-beta.4-anenji.1`).
+  (release `v1.1.0-beta.4-anenji.2`).
 - [Documentation EyBond du projet](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/wiki/EyBond-Transport-Setup.md)
   — transport inverse, Docker et dépannage.
 - [`PROTOCOL.md`](PROTOCOL.md) — carte des registres SMG-II.

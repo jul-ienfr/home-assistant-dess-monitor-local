@@ -525,6 +525,50 @@ class TestMultiSession:
 
         asyncio.run(scenario())
 
+    def test_silent_session_dropped_after_stale_timeout(self):
+        # A half-open TCP session keeps accepting writes, so the heartbeat
+        # task sees no error and the announcer stays paused. Once nothing has
+        # been received for SESSION_STALE_AFTER, the session must be dropped
+        # and discovery allowed to resume.
+        async def scenario():
+            mgr = _new_manager()
+            r, w = _FakeReader(), _FakeWriter(("10.0.0.1", 1111))
+            task = asyncio.create_task(mgr._handle_session(r, w))
+            r.feed(_dongle_heartbeat("PN0000000001"))
+            await _until(lambda: mgr.identified_pns == ["PN0000000001"])
+            sess = mgr._sessions_by_pn["PN0000000001"]
+            sess.last_rx -= ey.SESSION_STALE_AFTER + 1
+            with patch.object(ey, "FORWARD_RESPONSE_TIMEOUT", 0.05):
+                result = await mgr.send_frame(
+                    1, b"QPIGS\r", timeout=0.1, pn="PN0000000001"
+                )
+            assert result is None
+            assert not mgr.connected
+            assert w.closed is True
+            assert mgr._should_announce() is True
+            await _drain(mgr, task)
+
+        asyncio.run(scenario())
+
+    def test_recent_session_not_dropped_on_timeout(self):
+        # A reply timeout on a session that is still delivering frames (e.g.
+        # the inverter is off) must not force a dongle reconnect.
+        async def scenario():
+            mgr = _new_manager()
+            r, w = _FakeReader(), _FakeWriter(("10.0.0.1", 1111))
+            task = asyncio.create_task(mgr._handle_session(r, w))
+            r.feed(_dongle_heartbeat("PN0000000001"))
+            await _until(lambda: mgr.identified_pns == ["PN0000000001"])
+            with patch.object(ey, "FORWARD_RESPONSE_TIMEOUT", 0.05):
+                result = await mgr.send_frame(
+                    1, b"QPIGS\r", timeout=0.1, pn="PN0000000001"
+                )
+            assert result is None
+            assert "PN0000000001" in mgr.identified_pns
+            await _drain(mgr, task)
+
+        asyncio.run(scenario())
+
     def test_dead_session_closed_on_heartbeat_write_failure(self):
         # S3: a failed heartbeat write means the connection is dead — the loop
         # closes the writer so the read side unblocks and the session drops
