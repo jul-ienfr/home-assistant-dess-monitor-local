@@ -20,9 +20,10 @@ du port disponible sur l'onduleur.
 Le même firmware `anenji.yaml` fonctionne dans les deux cas : la broche DE/RE
 (GPIO4) est simplement non câblée en RS232.
 
-> Pour piloter l'onduleur **sans ESP32** (passerelle série → Ethernet,
-> adaptateur USB sur le serveur Home Assistant ou cloud), voir
-> [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md).
+> Pour piloter l'onduleur **sans ESP32** (dongle Wi-Fi d'origine, passerelle
+> série → Ethernet, adaptateur USB sur le serveur Home Assistant ou cloud),
+> voir [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md) et
+> [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
 
 ## 2. Vue d'ensemble
 

@@ -25,6 +25,13 @@ expose, soit remplacer/insérer une passerelle locale sur le bus série.
 > Le dongle Wi-Fi n'est pas l'onduleur : l'IP appartient au dongle, et
 > l'onduleur n'a généralement pas de pile TCP/IP.
 
+Le dongle **Eybond / SmartESS** de ce site expose bien un protocole local, mais
+pas sous forme de serveur Modbus TCP : il accepte une annonce UDP
+(`set>server=<ip>:<port>;`) et ouvre lui-même une connexion TCP vers Home
+Assistant. C'est la voie décrite dans [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md), et
+elle a été validée sur le matériel (lecture des registres 100/201/300 et
+écriture FC16).
+
 ## 2. Diagnostic en cinq minutes
 
 Récupérer l'IP du dongle dans le bail DHCP du routeur, puis tester les ports
@@ -44,6 +51,7 @@ foreach ($port in 502, 8899, 80, 443, 23) {
 |-----:|------------------------|
 | 502 | Modbus TCP ou RTU encapsulé : à tester en lecture |
 | 8899 | Protocole Solarman propriétaire, souvent **pas** du Modbus |
+| 58899/UDP | Écoute Eybond : accepte `set>server=<ip>:<port>;` (non testable avec `Test-NetConnection`) |
 | 80 / 443 | Page web de configuration du dongle |
 | 23 | Telnet de diagnostic, rarement utile |
 
@@ -54,22 +62,53 @@ fonctionnement) avec un client Modbus. Deux variantes existent :
 - **RTU over TCP** (trame RTU + CRC, sans MBAP) : la passerelle est
   transparente.
 
-Si tous les ports sont fermés, le dongle est uniquement cloud : passer à la
-section 3 ou 5.
+Si les ports 502 et 8899 sont fermés, le dongle n'expose pas Modbus TCP. Ce
+n'est pas une conclusion d'inutilisabilité : tester la voie Eybond (section 3)
+avant de le considérer comme uniquement cloud. Sinon, passer à la section 4
+(passerelle série) ou 6 (cloud).
 
-## 3. Option A — Passerelle série → Ethernet (recommandé)
+## 3. Option A — Dongle Wi-Fi d'origine (Eybond / SmartESS)
+
+C'est la voie la plus directe lorsque le dongle d'origine est déjà installé :
+aucun matériel supplémentaire et aucune redirection de port depuis Internet.
+
+Principe :
+
+- Home Assistant écoute en TCP sur `8899` et annonce son adresse au dongle en
+  UDP sur `58899` : `set>server=<ip-ha>:8899;` ;
+- le dongle ouvre lui-même la connexion TCP vers Home Assistant ;
+- les trames Modbus RTU (FC3 en lecture, FC16 en écriture) sont transportées
+  dans le canal `Forward2Device` du protocole Eybond.
+
+C'est le dongle qui initie la connexion : le NAT du routeur n'a rien à
+configurer. En Docker, publier `8899:8899/tcp` et annoncer l'IP LAN de l'hôte,
+jamais celle du conteneur.
+
+Validation sur ce site : dongle `192.168.68.57`, lectures des blocs 100, 201 et
+300, écriture FC16 acceptée (FC06 refusée). L'intégration Home Assistant
+utilisée est **DESS Monitor Local** en mode « EyBond hub ».
+
+Limites à connaître : le cloud SmartESS est hors ligne pendant le contrôle
+local et un seul processus peut écouter sur 8899. La beta.3 upstream tronque
+le PN à 14 caractères et ne mappe pas le mode de sortie SUB (registre 301 =
+3) ; le fork `1.1.0-beta.3-anenji.3` corrige ces deux points.
+
+Procédure complète, valeurs mesurées et dépannage :
+[`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
+
+## 4. Option B — Passerelle série → Ethernet
 
 C'est le remplacement direct de l'ESP32, sans cloud et sans modifier
-l'onduleur.
+l'onduleur. C'est la voie la plus prévisible pour les écritures.
 
-### 3.1 Matériel
+### 4.1 Matériel
 
 - une passerelle série → Ethernet, par exemple USR-TCP232-410S,
   Waveshare RS232/RS485 to Ethernet ou PUSR USR-TCP232-302 ;
 - une alimentation adaptée à la passerelle ;
 - un câble vers le port COM de l'onduleur (voir [`WIRING.md`](WIRING.md)).
 
-### 3.2 Câblage
+### 4.2 Câblage
 
 | Port onduleur | Câblage passerelle |
 |---------------|--------------------|
@@ -80,7 +119,7 @@ l'onduleur.
 > multimètre avant de brancher la passerelle, et ne jamais relier cette broche
 > à un port série.
 
-### 3.3 Configuration de la passerelle
+### 4.3 Configuration de la passerelle
 
 - mode **TCP Server** (ou « transparent ») ;
 - **9600 bauds, 8 bits, sans parité, 1 stop** ;
@@ -89,7 +128,7 @@ l'onduleur.
 - si la passerelle propose un mode **Modbus TCP**, l'activer ; sinon laisser en
   mode transparent (RTU over TCP).
 
-### 3.4 Configuration Home Assistant
+### 4.4 Configuration Home Assistant
 
 Avec une passerelle transparente (RTU over TCP), le type est `rtuovertcp` :
 
@@ -132,7 +171,7 @@ Avec une passerelle qui traduit réellement en Modbus TCP, remplacer par :
 
 Les adresses, types et échelles sont dans [`PROTOCOL.md`](PROTOCOL.md).
 
-## 4. Option B — Adaptateur USB sur la machine Home Assistant
+## 5. Option C — Adaptateur USB sur la machine Home Assistant
 
 Si le serveur Home Assistant est proche de l'onduleur, un adaptateur
 USB-RS485 (ou USB-RS232 avec un MAX3232) suffit.
@@ -158,7 +197,7 @@ modbus:
 C'est la solution la moins chère, mais elle impose un câble entre le serveur
 Home Assistant et l'onduleur.
 
-## 5. Option C — Cloud du fabricant
+## 6. Option D — Cloud du fabricant
 
 Sans aucun matériel supplémentaire, on peut passer par le compte cloud :
 
@@ -175,7 +214,7 @@ Limites à connaître :
 
 Cette voie convient à la **surveillance**, pas à une régulation temps réel.
 
-## 6. Écriture des réglages depuis Home Assistant
+## 7. Écriture des réglages depuis Home Assistant
 
 L'intégration Modbus de Home Assistant expose :
 
@@ -186,6 +225,10 @@ L'intégration Modbus de Home Assistant expose :
 Point important pour l'Anenji : le firmware d'origine utilise la **fonction 16**
 (écriture de plusieurs registres). `modbus.write_register` utilise la fonction
 06. Selon la version de l'onduleur, FC06 peut être refusée.
+
+Sur la voie Eybond, l'intégration DESS Monitor Local essaie FC06 puis bascule
+automatiquement sur FC16. Ce comportement a été validé sur l'onduleur du site
+(FC06 sans réponse, FC16 acceptée) ; voir [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
 
 Pour les commandes tout-ou-rien, utiliser un `switch` avec
 `write_type: holdings` (FC16) :
@@ -210,18 +253,26 @@ Pour les valeurs numériques (tension de charge, courant maximal, etc.) :
 
 Les plages et les adresses sont dans [`PROTOCOL.md`](PROTOCOL.md).
 
-## 7. Comparaison
+## 8. Comparaison
 
 | Solution | Local | Contrôle | Matériel | Latence | Dépendance |
 |----------|:-----:|:--------:|----------|---------|------------|
+| Dongle d'origine (Eybond) | Oui | Oui* | 0 € | Faible | Intégration beta ; cloud coupé |
 | Passerelle série → Ethernet | Oui | Oui | 30-60 € | Faible | Aucune |
 | USB sur le serveur HA | Oui | Oui | 10-20 € | Faible | HA proche de l'onduleur |
 | Cloud fabricant | Non | Partiel | 0 € | Élevée | Internet + compte |
 
-## 8. Sécurité
+\* La beta.3 upstream ne mappe pas encore le mode SUB ni le bouton
+d'acquittement de défaut sur le transport Eybond ; le fork
+`1.1.0-beta.3-anenji.3` les ajoute. La lecture et les écritures FC16 sont
+validées sur le dongle du site.
 
-- Modbus TCP **n'authentifie pas** et **ne chiffre pas** : ne jamais exposer le
-  port 502 sur Internet.
+## 9. Sécurité
+
+- Modbus TCP et le transport Eybond **n'authentifient pas** et **ne chiffrent
+  pas** : ne jamais exposer les ports 502 ou 8899 sur Internet.
+- L'interface web du dongle (port 80) peut être accessible sans authentification
+  forte : la restreindre au réseau d'administration.
 - Placer l'onduleur et la passerelle sur un VLAN IoT, avec un filtrage vers
   Home Assistant uniquement.
 - Utiliser un mot de passe unique pour le compte cloud et activer la
@@ -229,18 +280,25 @@ Les plages et les adresses sont dans [`PROTOCOL.md`](PROTOCOL.md).
 - Avant une écriture : sauvegarder les registres, vérifier la borne, tester un
   réglage réversible.
 
-## 9. Recommandation
+## 10. Recommandation
 
-- **Contrôle local fiable** : passerelle série → Ethernet (option A).
-- **Installation compacte** : adaptateur USB sur le serveur HA (option B).
-- **Surveillance sans matériel** : cloud (option C), en acceptant ses limites.
+- **Dongle d'origine déjà installé** : option A (Eybond), validée sur ce site,
+  sans matériel supplémentaire. Accepter que le cloud soit coupé pendant le
+  contrôle local et que l'intégration soit encore en beta.
+- **Contrôle local fiable, écritures prévisibles** : passerelle série →
+  Ethernet (option B).
+- **Installation compacte** : adaptateur USB sur le serveur HA (option C).
+- **Surveillance sans matériel** : cloud (option D), en acceptant ses limites.
 
 Le dongle Wi-Fi d'origine peut parfois être reflashé en ESPHome, mais il
 redevient alors un ESP32 : cette voie est hors du périmètre de ce document.
 
-## 10. Références
+## 11. Références
 
 - [Intégration Modbus de Home Assistant](https://www.home-assistant.io/integrations/modbus/)
 - [Composant Modbus d'ESPHome](https://esphome.io/components/modbus_controller.html)
+- [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
+  — intégration EyBond / SMG-II.
+- [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) — procédure validée sur le dongle du site
 - [`PROTOCOL.md`](PROTOCOL.md) — carte des registres et paramètres de liaison
 - [`WIRING.md`](WIRING.md) — câblage RS232/RS485 et précautions

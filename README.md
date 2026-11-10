@@ -5,8 +5,11 @@ Firmware ESPHome pour surveiller et piloter un onduleur solaire hybride
 Assistant ou en autonomie.
 
 > **État** : configuration validée avec ESPHome 2025.12.2 (`esphome config` et
-> `esphome compile`). Le test sur onduleur réel reste à effectuer avec la
-> checklist [`quickstart.md`](specs/001-anenji-functional/quickstart.md).
+> `esphome compile`). Le test ESP32 sur onduleur réel reste à effectuer avec la
+> checklist [`quickstart.md`](specs/001-anenji-functional/quickstart.md). La
+> voie **dongle Wi-Fi Eybond** est en revanche validée sur le matériel
+> (lecture des registres et écriture FC16) : voir
+> [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
 
 ## Sommaire
 
@@ -14,6 +17,7 @@ Assistant ou en autonomie.
 - [Fonctionnalités](#fonctionnalités)
 - [Démarrage rapide](#démarrage-rapide)
 - [Sans ESP32](#sans-esp32)
+- [Contrôle via le dongle Wi-Fi Eybond](EYBOND_LOCAL.md)
 - [Carte des registres](#carte-des-registres)
 - [Sécurité](#sécurité)
 - [Variantes et limites](#variantes-et-limites)
@@ -107,20 +111,27 @@ Procédure détaillée, checklist de vérification et adaptation 48 V :
 
 ## Sans ESP32
 
-Le firmware ESP32 n'est pas obligatoire pour lire ou piloter l'onduleur. Trois
+Le firmware ESP32 n'est pas obligatoire pour lire ou piloter l'onduleur. Quatre
 voies existent :
 
-1. **Passerelle série → Ethernet** (recommandée) : elle remplace l'ESP32 sur le
-   bus RS232/RS485 et reste entièrement locale.
-2. **Adaptateur USB-RS485/RS232** sur le serveur Home Assistant, si celui-ci
+1. **Dongle Wi-Fi d'origine (Eybond / SmartESS)** : le plus direct lorsque le
+   dongle est déjà installé. Il accepte une annonce UDP et ouvre une connexion
+   TCP inverse vers Home Assistant ; aucune passerelle supplémentaire n'est
+   nécessaire. Voie **validée sur le matériel du site** (lecture + écriture
+   FC16) : voir [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
+2. **Passerelle série → Ethernet** : elle remplace l'ESP32 sur le bus
+   RS232/RS485 et reste entièrement locale. C'est la voie la plus prévisible
+   pour les écritures.
+3. **Adaptateur USB-RS485/RS232** sur le serveur Home Assistant, si celui-ci
    est proche de l'onduleur.
-3. **Cloud fabricant** (SmartESS/SolarMAN), sans matériel mais avec latence et
+4. **Cloud fabricant** (SmartESS/SolarMAN), sans matériel mais avec latence et
    dépendance à Internet.
 
-Le dongle Wi-Fi d'origine est une passerelle série → cloud : son IP n'expose
-généralement pas Modbus en local. Tests de ports, configuration Home Assistant,
-limites d'écriture FC16 et sécurité : voir
-[`REMOTE_ACCESS.md`](REMOTE_ACCESS.md).
+Le dongle Wi-Fi d'origine n'expose pas Modbus TCP sur son IP (ports 502 et 8899
+fermés). Il peut néanmoins être détourné du cloud vers Home Assistant via son
+protocole Eybond. Tests de ports, configuration Home Assistant, limites
+d'écriture FC16 et sécurité : voir [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md) et
+[`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
 
 ## Carte des registres
 
@@ -175,7 +186,10 @@ secrets.yaml.example         # modèle de secrets
 README.md                    # ce fichier
 WIRING.md                    # câblage RS232 / RS485
 PROTOCOL.md                  # carte de registres SMG-II
-REMOTE_ACCESS.md             # contrôle sans ESP32 (passerelle, USB, cloud)
+REMOTE_ACCESS.md             # contrôle sans ESP32 (comparaison des voies)
+EYBOND_LOCAL.md              # contrôle via le dongle Wi-Fi d'origine
+tools/                       # diagnostic Eybond en lecture seule
+patches/                     # correctif optionnel pour DESS Monitor Local beta.3
 legacy/                      # anciennes configurations (avertissement)
 specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickstart
 .specify/                    # infrastructure SpecKit
@@ -189,6 +203,7 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
 | Aucune trame | Mauvaise adresse ou débit | Vérifier `0x01` et 9600 8N1 |
 | Température à 3,2 °C | Ancienne configuration | Utiliser `anenji.yaml` |
 | Écriture sans effet | FC06 au lieu de FC16 | Vérifier `use_write_multiple: true` |
+| Port 502 du dongle fermé | Le dongle n'est pas un serveur Modbus | Utiliser [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) |
 | Valeurs d'un 11 kW incohérentes | Carte de registres différente | Utiliser un projet 11 kW |
 | Compilation impossible | Dossier synchronisé | Compiler dans `C:\Temp\anenji` |
 
@@ -200,6 +215,10 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
 - [janas-karol/esphome-anenji-6.2kw](https://github.com/janas-karol/esphome-anenji-6.2kw)
 - [PreK/esphome-anenji-11kw-native-modbus](https://github.com/PreK/esphome-anenji-11kw-native-modbus)
 - [attilagyurman/anenji-local-modbus](https://github.com/attilagyurman/anenji-local-modbus)
+- [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
+  — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
+- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
+  — beta.3 avec SUB, PN complet et SOC réel, prête pour HACS.
 - [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
 
 ## Licence
