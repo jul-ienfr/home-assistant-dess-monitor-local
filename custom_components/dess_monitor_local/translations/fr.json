@@ -1,0 +1,539 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Cet appareil est déjà configuré."
+    },
+    "error": {
+      "cannot_connect": "Connexion impossible. Vérifiez l'adresse et le réseau.",
+      "unknown": "Erreur inattendue. Consultez les journaux de Home Assistant.",
+      "name_required": "Saisissez un nom.",
+      "host_required": "L'hôte ou l'IP est requis pour ce transport.",
+      "serial_required": "Choisissez ou saisissez un port série.",
+      "agent_device_id_required": "L'identifiant d'appareil est requis pour l'agent local."
+    },
+    "step": {
+      "user": {
+        "title": "Ajouter DESS Monitor Local",
+        "description": "Ajoutez un onduleur seul, ou un hub EyBond qui découvre automatiquement plusieurs dongles Wi-Fi sur un même port.",
+        "menu_options": {
+          "device": "Onduleur seul",
+          "hub": "Hub EyBond (découverte automatique de plusieurs dongles)"
+        }
+      },
+      "device": {
+        "title": "Ajouter un onduleur",
+        "description": "Donnez un nom convivial à cet onduleur. Vous choisirez le protocole, le transport et l'adresse aux étapes suivantes.",
+        "data": {
+          "name": "Nom"
+        }
+      },
+      "hub": {
+        "title": "Ajouter un hub EyBond",
+        "description": "Un seul écouteur TCP accepte plusieurs dongles EyBond, découverts automatiquement par numéro de série (PN). Après l'installation, ouvrez les options du hub pour attribuer un protocole à chaque dongle détecté.",
+        "data": {
+          "name": "Nom",
+          "host": "Interface d'écoute",
+          "port": "Port d'écoute",
+          "eybond_broadcast": "Adresse de diffusion",
+          "eybond_announce_ip": "IP annoncée",
+          "update_interval": "Intervalle de mise à jour (secondes)"
+        },
+        "data_description": {
+          "host": "Interface locale sur laquelle ouvrir l'écouteur TCP (généralement 0.0.0.0).",
+          "port": "Port TCP sur lequel les dongles se reconnectent (8899 par défaut).",
+          "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local aux dongles.",
+          "eybond_announce_ip": "IP annoncée aux dongles. Laissez vide pour la détection automatique ; indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "update_interval": "Fréquence d'interrogation de chaque onduleur enfant activé."
+        }
+      },
+      "protocol": {
+        "title": "Choisir le protocole",
+        "description": "Choisissez le protocole de commande et de données utilisé par l'onduleur ou la source locale.",
+        "data": {
+          "protocol": "Protocole"
+        }
+      },
+      "transport": {
+        "title": "Choisir le transport",
+        "description": "Protocole : {protocol}. Choisissez comment Home Assistant y accède.",
+        "data": {
+          "transport": "Transport"
+        }
+      },
+      "connection": {
+        "title": "Paramètres de connexion",
+        "description": "Protocole : {protocol}. Transport : {transport}. Saisissez l'adresse de connexion et la fréquence d'interrogation.",
+        "data": {
+          "host": "Hôte / adresse IP",
+          "port": "Port",
+          "serial_device": "Port série",
+          "agent_device_id": "Identifiant d'appareil du fournisseur",
+          "eybond_devaddr": "Adresse RS485",
+          "eybond_broadcast": "Adresse de diffusion",
+          "eybond_announce_ip": "IP annoncée",
+          "update_interval": "Intervalle de mise à jour (secondes)",
+          "strict_crc": "Validation CRC stricte"
+        },
+        "data_description": {
+          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond.",
+          "port": "Port TCP. Valeurs par défaut : 8899 pour TCP/Modbus/EyBond direct, 8787 pour l'agent local.",
+          "serial_device": "Chemin du périphérique USB / RS232. Vous pouvez aussi saisir un chemin manuellement.",
+          "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
+          "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
+          "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique.",
+          "update_interval": "Fréquence d'interrogation de l'appareil. Une valeur plus basse donne des mises à jour plus fréquentes.",
+          "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
+        }
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "no_devices": "Aucun dongle EyBond détecté pour l'instant. Allumez un dongle sur le même réseau, attendez qu'il se connecte, puis réessayez.",
+      "dongle_offline": "Le dongle n'est pas connecté, son numéro de série (PN) ne peut donc pas être relevé pour la migration. Attendez qu'il soit en ligne, puis réessayez.",
+      "not_eybond": "Cette entrée n'est pas un appareil EyBond ; elle ne peut pas être convertie en hub.",
+      "rescan_started": "Recherche de nouveaux dongles pendant environ une minute. Ils apparaîtront sous « Gérer les appareils détectés »."
+    },
+    "error": {
+      "host_required": "L'hôte ou l'IP est requis pour ce transport.",
+      "serial_required": "Choisissez ou saisissez un port série.",
+      "agent_device_id_required": "L'identifiant d'appareil est requis pour l'agent local."
+    },
+    "step": {
+      "init": {
+        "title": "Options EyBond",
+        "menu_options": {
+          "devices": "Gérer les appareils détectés",
+          "rescan": "Rechercher de nouveaux dongles",
+          "listener": "Paramètres de l'écouteur",
+          "edit": "Modifier la connexion",
+          "migrate_hub": "Convertir en hub EyBond",
+          "debug_panel": "Panneau de diagnostic"
+        }
+      },
+      "rescan": {
+        "title": "Rechercher de nouveaux dongles",
+        "description": "Diffuse la balise de découverte pendant environ une minute afin que les nouveaux dongles EyBond du réseau se connectent et soient détectés. Les dongles déjà connectés peuvent brièvement se reconnecter (la balise ne peut pas cibler un seul dongle). Validez pour lancer la recherche."
+      },
+      "migrate_hub": {
+        "title": "Convertir en hub EyBond",
+        "description": "Cette opération convertit l'entrée mono-appareil en hub EyBond : un écouteur unique qui découvre les dongles par numéro de série (PN) et permet d'en ajouter d'autres plus tard. Le dongle actuellement connecté devient un enfant configuré avec son protocole et son adresse actuels. L'historique des entités est conservé. Le dongle doit être en ligne pour relever son PN. Validez pour convertir et recharger."
+      },
+      "devices": {
+        "title": "Configurer les appareils détectés",
+        "description": "Configurez tous les dongles détectés ici, puis validez une seule fois. Les champs sont regroupés par numéro de série (PN) : activez le dongle, nommez-le, choisissez un protocole (« aucun » = détecté mais non interrogé), indiquez l'adresse RS485 (1 sauf chaînage) ou cochez « supprimer » pour l'oublier. L'application ne recharge PAS le hub : vos dongles connectés restent en ligne.\n\nDétectés :\n{devices}"
+      },
+      "listener": {
+        "title": "Paramètres de l'écouteur",
+        "description": "Modifiez l'écouteur TCP et l'intervalle d'interrogation. L'enregistrement recharge le hub.",
+        "data": {
+          "host": "Interface d'écoute",
+          "port": "Port d'écoute",
+          "eybond_broadcast": "Adresse de diffusion",
+          "eybond_announce_ip": "IP annoncée",
+          "update_interval": "Intervalle de mise à jour (secondes)"
+        }
+      },
+      "protocol": {
+        "title": "Protocole de connexion",
+        "description": "Choisissez le protocole de commande et de données utilisé par l'onduleur ou la source locale.",
+        "data": {
+          "protocol": "Protocole"
+        }
+      },
+      "transport": {
+        "title": "Transport de connexion",
+        "description": "Protocole : {protocol}. Choisissez comment ce hub y accède.",
+        "data": {
+          "transport": "Transport"
+        }
+      },
+      "connection": {
+        "title": "Paramètres de connexion",
+        "description": "Protocole : {protocol}. Transport : {transport}. Modifiez l'adresse de connexion et l'intervalle d'interrogation.",
+        "data": {
+          "host": "Hôte / adresse IP",
+          "port": "Port",
+          "serial_device": "Port série",
+          "agent_device_id": "Identifiant d'appareil du fournisseur",
+          "eybond_devaddr": "Adresse RS485",
+          "eybond_broadcast": "Adresse de diffusion",
+          "eybond_announce_ip": "IP annoncée",
+          "update_interval": "Intervalle de mise à jour (secondes)",
+          "strict_crc": "Validation CRC stricte",
+          "debug_panel": "Afficher le panneau de diagnostic dans la barre latérale"
+        },
+        "data_description": {
+          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond.",
+          "port": "Port TCP. Valeurs par défaut : 8899 pour TCP/Modbus/EyBond direct, 8787 pour l'agent local.",
+          "serial_device": "Chemin du périphérique USB / RS232. Vous pouvez aussi saisir un chemin manuellement.",
+          "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
+          "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
+          "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique.",
+          "update_interval": "Fréquence d'interrogation de l'appareil. Une valeur plus basse donne des mises à jour plus fréquentes.",
+          "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
+        }
+      },
+      "debug_panel": {
+        "title": "Panneau de diagnostic",
+        "description": "Affiche le panneau de diagnostic en direct, réservé aux administrateurs, dans la barre latérale. Appliqué après le rechargement de l'intégration.",
+        "data": {
+          "debug_panel": "Afficher le panneau de diagnostic dans la barre latérale"
+        }
+      }
+    }
+  },
+  "selector": {
+    "protocol": {
+      "options": {
+        "voltronic": "Voltronic / Axpert PI30",
+        "pi18": "PI18 / InfiniSolar-V",
+        "modbus": "Modbus RTU (SMG-II)",
+        "agent": "Agent local solar-system-agent"
+      }
+    },
+    "transport": {
+      "options": {
+        "tcp_elfin": "Passerelle TCP Elfin / transparente",
+        "tcp": "TCP",
+        "serial": "Série / USB (RS232 direct)",
+        "eybond": "Dongle Wi-Fi EyBond / SmartESS",
+        "agent_http": "HTTP"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "direct_pv_power": {
+        "name": "Puissance PV"
+      },
+      "direct_grid_ac_in_power": {
+        "name": "Puissance d'entrée réseau"
+      },
+      "direct_pv2_power": {
+        "name": "Puissance PV2"
+      },
+      "direct_pv_voltage": {
+        "name": "Tension PV"
+      },
+      "direct_pv2_voltage": {
+        "name": "Tension PV2"
+      },
+      "direct_pv2_current": {
+        "name": "Courant PV2"
+      },
+      "direct_battery": {
+        "name": "Tension batterie"
+      },
+      "direct_inverter_out_power": {
+        "name": "Puissance de sortie onduleur"
+      },
+      "direct_inverter_temperature": {
+        "name": "Température onduleur"
+      },
+      "direct_inverter_dc_dc_temperature": {
+        "name": "Température module DC-DC"
+      },
+      "direct_grid_voltage": {
+        "name": "Tension réseau"
+      },
+      "direct_grid_freq": {
+        "name": "Fréquence réseau"
+      },
+      "direct_ac_output_voltage": {
+        "name": "Tension de sortie AC"
+      },
+      "direct_ac_output_freq": {
+        "name": "Fréquence de sortie AC"
+      },
+      "direct_output_apparent_power": {
+        "name": "Puissance apparente"
+      },
+      "direct_load_percent": {
+        "name": "Taux de charge"
+      },
+      "direct_bus_voltage": {
+        "name": "Tension du bus"
+      },
+      "direct_battery_charging_current": {
+        "name": "Courant de charge batterie"
+      },
+      "direct_battery_discharge_current": {
+        "name": "Courant de décharge batterie"
+      },
+      "direct_battery_power": {
+        "name": "Puissance batterie"
+      },
+      "direct_battery_capacity": {
+        "name": "Capacité batterie"
+      },
+      "direct_pv_input_current": {
+        "name": "Courant d'entrée PV"
+      },
+      "direct_scc_batt_voltage": {
+        "name": "Tension batterie SCC"
+      },
+      "direct_operating_mode": {
+        "name": "Mode de fonctionnement"
+      },
+      "direct_device_status": {
+        "name": "État de l'appareil"
+      },
+      "direct_fault_summary": {
+        "name": "Résumé des défauts onduleur"
+      },
+      "direct_pv2_input_power": {
+        "name": "Puissance d'entrée PV2"
+      },
+      "direct_pv2_input_voltage": {
+        "name": "Tension d'entrée PV2"
+      },
+      "direct_pv2_input_current": {
+        "name": "Courant d'entrée PV2"
+      },
+      "direct_mppt1_temperature": {
+        "name": "Température MPPT1"
+      },
+      "direct_mppt2_temperature": {
+        "name": "Température MPPT2"
+      },
+      "direct_scc2_battery_voltage": {
+        "name": "Tension batterie SCC2"
+      },
+      "direct_mppt1_status": {
+        "name": "État MPPT1"
+      },
+      "direct_mppt2_status": {
+        "name": "État MPPT2"
+      },
+      "direct_battery_power_direction": {
+        "name": "Sens de puissance batterie"
+      },
+      "direct_dcac_power_direction": {
+        "name": "Sens de puissance DC-AC"
+      },
+      "direct_line_power_direction": {
+        "name": "Sens de puissance réseau"
+      },
+      "direct_rated_grid_voltage": {
+        "name": "Tension réseau nominale"
+      },
+      "direct_rated_input_current": {
+        "name": "Courant d'entrée nominal"
+      },
+      "direct_rated_ac_output_voltage": {
+        "name": "Tension de sortie AC nominale"
+      },
+      "direct_rated_output_frequency": {
+        "name": "Fréquence de sortie nominale"
+      },
+      "direct_rated_output_current": {
+        "name": "Courant de sortie nominal"
+      },
+      "direct_rated_output_apparent_power": {
+        "name": "Puissance apparente nominale"
+      },
+      "direct_rated_output_active_power": {
+        "name": "Puissance active nominale"
+      },
+      "direct_rated_battery_voltage": {
+        "name": "Tension batterie nominale"
+      },
+      "direct_low_battery_to_ac_bypass_voltage": {
+        "name": "Tension de passage secteur batterie basse"
+      },
+      "direct_shut_down_battery_voltage": {
+        "name": "Tension d'arrêt batterie"
+      },
+      "direct_bulk_charging_voltage": {
+        "name": "Tension de charge absorption"
+      },
+      "direct_float_charging_voltage": {
+        "name": "Tension de charge flottante"
+      },
+      "direct_battery_type": {
+        "name": "Type de batterie"
+      },
+      "direct_max_utility_charging_current": {
+        "name": "Courant de charge secteur max"
+      },
+      "direct_max_charging_current": {
+        "name": "Courant de charge max"
+      },
+      "direct_ac_input_voltage_range": {
+        "name": "Plage de tension d'entrée AC"
+      },
+      "direct_output_source_priority": {
+        "name": "Priorité de source de sortie"
+      },
+      "direct_charger_source_priority": {
+        "name": "Priorité de source de charge"
+      },
+      "direct_parallel_max_number": {
+        "name": "Nombre max en parallèle"
+      },
+      "direct_reserved_uu": {
+        "name": "Réservé UU"
+      },
+      "direct_reserved_v": {
+        "name": "Réservé V"
+      },
+      "direct_parallel_mode": {
+        "name": "Mode parallèle"
+      },
+      "direct_high_battery_voltage_to_battery_mode": {
+        "name": "Tension haute de retour en mode batterie"
+      },
+      "direct_solar_work_condition_in_parallel": {
+        "name": "Condition solaire en parallèle"
+      },
+      "direct_solar_max_charging_power_auto_adjust": {
+        "name": "Réglage auto puissance solaire max"
+      },
+      "direct_rated_battery_capacity": {
+        "name": "Capacité batterie nominale"
+      },
+      "direct_reserved_b": {
+        "name": "Réservé B"
+      },
+      "direct_reserved_ccc": {
+        "name": "Réservé CCC"
+      },
+      "direct_direct_pv_power_energy": {
+        "name": "Énergie PV"
+      },
+      "direct_direct_pv2_power_energy": {
+        "name": "Énergie PV2"
+      },
+      "direct_direct_inverter_out_power_energy": {
+        "name": "Énergie de sortie onduleur"
+      },
+      "direct_direct_output_apparent_power_energy": {
+        "name": "Énergie apparente"
+      },
+      "direct_battery_in_power_energy": {
+        "name": "Énergie chargée batterie"
+      },
+      "direct_battery_out_power_energy": {
+        "name": "Énergie déchargée batterie"
+      },
+      "direct_battery_state_of_charge": {
+        "name": "État de charge batterie"
+      },
+      "direct_time_to_floor": {
+        "name": "Temps avant le seuil de décharge"
+      },
+      "direct_time_to_full": {
+        "name": "Temps avant charge complète"
+      },
+      "direct_backup_time": {
+        "name": "Autonomie à la charge actuelle"
+      },
+      "direct_vsoc_last_sync": {
+        "name": "Dernière synchro pleine charge"
+      },
+      "discovered_dongles": {
+        "name": "Dongles détectés"
+      },
+      "direct_fault_advice": {
+        "name": "Conseils défauts et alertes"
+      }
+    },
+    "binary_sensor": {
+      "direct_status_fault": {
+        "name": "Défaut"
+      },
+      "direct_status_line_fail": {
+        "name": "Perte réseau"
+      },
+      "direct_status_bus_over": {
+        "name": "Surtension bus"
+      },
+      "direct_status_battery_low": {
+        "name": "Batterie basse"
+      },
+      "direct_status_battery_high": {
+        "name": "Batterie haute"
+      },
+      "direct_status_inverter_overload": {
+        "name": "Surcharge onduleur"
+      },
+      "direct_status_inverter_on": {
+        "name": "Onduleur actif"
+      },
+      "direct_status_charging_to_battery": {
+        "name": "Charge batterie"
+      },
+      "direct_status_charging_ac_active": {
+        "name": "Charge secteur active"
+      },
+      "direct_status_charging_scc_active": {
+        "name": "Charge solaire active"
+      },
+      "direct_warning_inverter_fault": {
+        "name": "Défaut onduleur"
+      },
+      "direct_warning_overload": {
+        "name": "Surcharge"
+      },
+      "direct_warning_over_temperature": {
+        "name": "Surchauffe"
+      },
+      "direct_warning_fan_locked": {
+        "name": "Ventilateur bloqué"
+      },
+      "direct_warning_battery_under_shutdown": {
+        "name": "Arrêt batterie"
+      },
+      "direct_warning_eeprom_fault": {
+        "name": "Défaut EEPROM"
+      },
+      "direct_any_warning": {
+        "name": "Alerte active"
+      }
+    },
+    "select": {
+      "battery_mode": {
+        "name": "Mode batterie"
+      },
+      "output_priority": {
+        "name": "Priorité de source de sortie"
+      },
+      "charge_source_priority": {
+        "name": "Priorité de source de charge"
+      },
+      "max_utility_charging_current": {
+        "name": "Courant de charge secteur max"
+      }
+    },
+    "number": {
+      "battery_capacity_ah": {
+        "name": "Capacité batterie (Ah)"
+      },
+      "full_charge_sync_voltage": {
+        "name": "Tension de synchro pleine charge"
+      },
+      "discharge_floor_soc": {
+        "name": "Seuil de décharge"
+      },
+      "float_voltage_window": {
+        "name": "Fenêtre de tension flottante"
+      },
+      "float_noise_floor": {
+        "name": "Seuil de bruit flottant"
+      }
+    },
+    "switch": {
+      "float_deadband": {
+        "name": "Zone morte flottante"
+      }
+    },
+    "button": {
+      "exit_fault_state": {
+        "name": "Réinitialiser l'état de défaut"
+      }
+    }
+  }
+}

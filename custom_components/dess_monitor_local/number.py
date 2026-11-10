@@ -77,17 +77,18 @@ class _VSocConfigNumber(NumberEntity, RestoreEntity):
 
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_has_entity_name = True
 
     # Subclass contract:
-    _id_suffix: str = ""        # unique_id tail
-    _name_suffix: str = ""      # friendly-name tail (drives the entity_id)
+    _id_suffix: str = ""        # unique_id tail == translation key tail
+    _name_suffix: str = ""      # English fallback, unused when translated
     _default_value: float | None = 0.0
 
     def __init__(self, inverter_device, hass):
         self._inverter_device = inverter_device
         self._hass = hass
         self._attr_unique_id = f"{inverter_device.inverter_id}_{self._id_suffix}"
-        self._attr_name = f"{inverter_device.name} {self._name_suffix}"
+        self._attr_translation_key = self._id_suffix
         self._value = self._default_value
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, inverter_device.inverter_id)},

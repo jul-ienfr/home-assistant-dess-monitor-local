@@ -42,6 +42,7 @@ _CHARGER_PRIORITY_TO_AGENT: dict = {
     ChargeSourcePrioritySetting.UTILITY_FIRST: "UtilityFirst",
     ChargeSourcePrioritySetting.SOLAR_FIRST: "SolarFirst",
     ChargeSourcePrioritySetting.SOLAR_AND_UTILITY: "SolarAndUtility",
+    ChargeSourcePrioritySetting.ONLY_SOLAR: "OnlySolar",
 }
 
 class AgentAdapter(BaseAdapter):

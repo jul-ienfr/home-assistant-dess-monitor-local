@@ -45,12 +45,13 @@ class FloatDeadbandSwitch(SwitchEntity, RestoreEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:sine-wave"
+    _attr_has_entity_name = True
+    _attr_translation_key = "float_deadband"
 
     def __init__(self, inverter_device: InverterDevice, hass: HomeAssistant):
         self._inverter_device = inverter_device
         self._hass = hass
         self._attr_unique_id = f"{inverter_device.inverter_id}_float_deadband"
-        self._attr_name = f"{inverter_device.name} vSoC Float Deadband"
         self._attr_is_on = True  # default: deadband active
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, inverter_device.inverter_id)},

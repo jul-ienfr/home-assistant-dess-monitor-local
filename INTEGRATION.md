@@ -74,6 +74,37 @@ for Modbus because the status bits do not exist there.
 `DirectLoadPercentSensor` no longer claims `POWER_FACTOR` as its device
 class, and output apparent power now uses the VA unit instead of W.
 
+### Warnings, priorities and languages
+
+The fault-summary sensor decodes the two SMG-II status DWORDs instead of
+showing raw hex. Warning `0x40` is *PV low voltage* (normal at night or in
+deep shade); each active bit also gets an actionable `warning_advice` or
+`fault_advice` attribute, in English or French depending on the Home
+Assistant UI language. The any-warning binary sensor exposes the same
+stable keys.
+
+The two priority selects are deliberately separate:
+
+- **Output source priority** decides what powers the loads — grid, solar,
+  battery, or a combination.
+- **Charge source priority** decides what charges the battery — grid,
+  solar, both, or solar only.
+
+Their labels are plain language (*Grid first*, *SBU (battery before
+grid)*, *Solar first*, *SUB (grid before battery)*) and the `description`
+attribute explains the selected mode. The raw firmware value remains in
+`raw_value` for automations.
+
+Entity names and both configuration flows follow the Home Assistant
+language. English and French are bundled; any other language falls back to
+English. Changing the Home Assistant language picks up the new names after
+the integration reloads (or after a restart).
+
+Utility charging current is capped at the SMG-II maximum of **100 A**
+(register 333); if the inverter reports a lower total charge limit, that
+lower value is offered instead. The applied cap is exposed as
+`max_allowed_amps`.
+
 ## Installation
 
 ### Marketplace (recommended, Home Assistant 2026.11+)

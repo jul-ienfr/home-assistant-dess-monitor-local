@@ -856,6 +856,7 @@ class _TimeEstimateBase(DirectSensorBase):
     _attr_native_unit_of_measurement = UnitOfTime.HOURS
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
+    _attr_has_entity_name = True
 
     def __init__(self, inverter_device, coordinator, soc_sensor):
         super().__init__(inverter_device, coordinator)
@@ -878,15 +879,13 @@ class DirectBatteryTimeToFloorSensor(_TimeEstimateBase):
     """
 
     _attr_icon = "mdi:battery-clock"
+    _attr_translation_key = "direct_time_to_floor"
 
     def __init__(self, inverter_device, coordinator, soc_sensor, hass):
         super().__init__(inverter_device, coordinator, soc_sensor)
         self._hass = hass
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_time_to_floor"
-        )
-        self._attr_name = (
-            f"{inverter_device.name} vSoC Time to Discharge Floor"
         )
         self._floor_unique_id = (
             f"{inverter_device.inverter_id}_discharge_floor_soc"
@@ -931,13 +930,13 @@ class DirectBatteryTimeToFullSensor(_TimeEstimateBase):
     """Hours until vSoC reaches 100% at the current charging rate."""
 
     _attr_icon = "mdi:battery-charging-100"
+    _attr_translation_key = "direct_time_to_full"
 
     def __init__(self, inverter_device, coordinator, soc_sensor):
         super().__init__(inverter_device, coordinator, soc_sensor)
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_time_to_full"
         )
-        self._attr_name = f"{inverter_device.name} vSoC Time to Full"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -986,15 +985,13 @@ class DirectBatteryBackupTimeSensor(_TimeEstimateBase):
     """
 
     _attr_icon = "mdi:home-battery"
+    _attr_translation_key = "direct_backup_time"
 
     def __init__(self, inverter_device, coordinator, soc_sensor, hass):
         super().__init__(inverter_device, coordinator, soc_sensor)
         self._hass = hass
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_backup_time"
-        )
-        self._attr_name = (
-            f"{inverter_device.name} vSoC Backup Time at Current Load"
         )
         self._floor_unique_id = (
             f"{inverter_device.inverter_id}_discharge_floor_soc"
@@ -1072,15 +1069,14 @@ class DirectBatteryVSocLastSyncSensor(DirectSensorBase):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:battery-sync-outline"
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_vsoc_last_sync"
 
     def __init__(self, inverter_device, coordinator, soc_sensor):
         super().__init__(inverter_device, coordinator)
         self._soc_sensor = soc_sensor
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_vsoc_last_sync"
-        )
-        self._attr_name = (
-            f"{inverter_device.name} vSoC Last Full Charge Sync"
         )
 
     @callback

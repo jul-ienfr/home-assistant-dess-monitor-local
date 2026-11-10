@@ -203,5 +203,337 @@
         "agent_http": "HTTP"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "direct_pv_power": {
+        "name": "PV Power"
+      },
+      "direct_grid_ac_in_power": {
+        "name": "Grid AC In Power"
+      },
+      "direct_pv2_power": {
+        "name": "PV2 Power"
+      },
+      "direct_pv_voltage": {
+        "name": "PV Voltage"
+      },
+      "direct_pv2_voltage": {
+        "name": "PV2 Voltage"
+      },
+      "direct_pv2_current": {
+        "name": "PV2 Current"
+      },
+      "direct_battery": {
+        "name": "Battery Voltage"
+      },
+      "direct_inverter_out_power": {
+        "name": "Inverter Out Power"
+      },
+      "direct_inverter_temperature": {
+        "name": "Inverter Temperature"
+      },
+      "direct_inverter_dc_dc_temperature": {
+        "name": "Inverter DC-DC Module Temperature"
+      },
+      "direct_grid_voltage": {
+        "name": "Grid Voltage"
+      },
+      "direct_grid_freq": {
+        "name": "Grid Frequency"
+      },
+      "direct_ac_output_voltage": {
+        "name": "AC Output Voltage"
+      },
+      "direct_ac_output_freq": {
+        "name": "AC Output Frequency"
+      },
+      "direct_output_apparent_power": {
+        "name": "Apparent Power"
+      },
+      "direct_load_percent": {
+        "name": "Load Percent"
+      },
+      "direct_bus_voltage": {
+        "name": "Bus Voltage"
+      },
+      "direct_battery_charging_current": {
+        "name": "Battery Charging Current"
+      },
+      "direct_battery_discharge_current": {
+        "name": "Battery Discharge Current"
+      },
+      "direct_battery_power": {
+        "name": "Battery Power"
+      },
+      "direct_battery_capacity": {
+        "name": "Battery Capacity"
+      },
+      "direct_pv_input_current": {
+        "name": "PV Input Current"
+      },
+      "direct_scc_batt_voltage": {
+        "name": "SCC Battery Voltage"
+      },
+      "direct_operating_mode": {
+        "name": "Operating Mode"
+      },
+      "direct_device_status": {
+        "name": "Device Status"
+      },
+      "direct_fault_summary": {
+        "name": "Inverter Fault Summary"
+      },
+      "direct_pv2_input_power": {
+        "name": "PV2 Input Power"
+      },
+      "direct_pv2_input_voltage": {
+        "name": "PV2 Input Voltage"
+      },
+      "direct_pv2_input_current": {
+        "name": "PV2 Input Current"
+      },
+      "direct_mppt1_temperature": {
+        "name": "MPPT1 Temperature"
+      },
+      "direct_mppt2_temperature": {
+        "name": "MPPT2 Temperature"
+      },
+      "direct_scc2_battery_voltage": {
+        "name": "SCC2 Battery Voltage"
+      },
+      "direct_mppt1_status": {
+        "name": "MPPT1 Status"
+      },
+      "direct_mppt2_status": {
+        "name": "MPPT2 Status"
+      },
+      "direct_battery_power_direction": {
+        "name": "Battery Power Direction"
+      },
+      "direct_dcac_power_direction": {
+        "name": "DC-AC Power Direction"
+      },
+      "direct_line_power_direction": {
+        "name": "Line Power Direction"
+      },
+      "direct_rated_grid_voltage": {
+        "name": "Rated Grid Voltage"
+      },
+      "direct_rated_input_current": {
+        "name": "Rated Input Current"
+      },
+      "direct_rated_ac_output_voltage": {
+        "name": "Rated AC Output Voltage"
+      },
+      "direct_rated_output_frequency": {
+        "name": "Rated Output Frequency"
+      },
+      "direct_rated_output_current": {
+        "name": "Rated Output Current"
+      },
+      "direct_rated_output_apparent_power": {
+        "name": "Rated Output Apparent Power"
+      },
+      "direct_rated_output_active_power": {
+        "name": "Rated Output Active Power"
+      },
+      "direct_rated_battery_voltage": {
+        "name": "Rated Battery Voltage"
+      },
+      "direct_low_battery_to_ac_bypass_voltage": {
+        "name": "Low Battery to AC Bypass Voltage"
+      },
+      "direct_shut_down_battery_voltage": {
+        "name": "Shut Down Battery Voltage"
+      },
+      "direct_bulk_charging_voltage": {
+        "name": "Bulk Charging Voltage"
+      },
+      "direct_float_charging_voltage": {
+        "name": "Float Charging Voltage"
+      },
+      "direct_battery_type": {
+        "name": "Battery Type"
+      },
+      "direct_max_utility_charging_current": {
+        "name": "Max Utility Charging Current"
+      },
+      "direct_max_charging_current": {
+        "name": "Max Charging Current"
+      },
+      "direct_ac_input_voltage_range": {
+        "name": "AC Input Voltage Range"
+      },
+      "direct_output_source_priority": {
+        "name": "Output Source Priority"
+      },
+      "direct_charger_source_priority": {
+        "name": "Charger Source Priority"
+      },
+      "direct_parallel_max_number": {
+        "name": "Parallel Max Number"
+      },
+      "direct_reserved_uu": {
+        "name": "Reserved UU"
+      },
+      "direct_reserved_v": {
+        "name": "Reserved V"
+      },
+      "direct_parallel_mode": {
+        "name": "Parallel Mode"
+      },
+      "direct_high_battery_voltage_to_battery_mode": {
+        "name": "High Battery Voltage to Battery Mode"
+      },
+      "direct_solar_work_condition_in_parallel": {
+        "name": "Solar Work Condition In Parallel"
+      },
+      "direct_solar_max_charging_power_auto_adjust": {
+        "name": "Solar Max Charging Power Auto Adjust"
+      },
+      "direct_rated_battery_capacity": {
+        "name": "Rated Battery Capacity"
+      },
+      "direct_reserved_b": {
+        "name": "Reserved B"
+      },
+      "direct_reserved_ccc": {
+        "name": "Reserved CCC"
+      },
+      "direct_direct_pv_power_energy": {
+        "name": "PV Power Energy"
+      },
+      "direct_direct_pv2_power_energy": {
+        "name": "PV2 Power Energy"
+      },
+      "direct_direct_inverter_out_power_energy": {
+        "name": "Inverter Out Power Energy"
+      },
+      "direct_direct_output_apparent_power_energy": {
+        "name": "Apparent Power Energy"
+      },
+      "direct_battery_in_power_energy": {
+        "name": "Battery In Energy"
+      },
+      "direct_battery_out_power_energy": {
+        "name": "Battery Out Energy"
+      },
+      "direct_battery_state_of_charge": {
+        "name": "Battery State of Charge"
+      },
+      "direct_time_to_floor": {
+        "name": "Time to Discharge Floor"
+      },
+      "direct_time_to_full": {
+        "name": "Time to Full"
+      },
+      "direct_backup_time": {
+        "name": "Backup Time at Current Load"
+      },
+      "direct_vsoc_last_sync": {
+        "name": "Last Full Charge Sync"
+      },
+      "discovered_dongles": {
+        "name": "Discovered dongles"
+      },
+      "direct_fault_advice": {
+        "name": "Fault and warning advice"
+      }
+    },
+    "binary_sensor": {
+      "direct_status_fault": {
+        "name": "Fault"
+      },
+      "direct_status_line_fail": {
+        "name": "Line Fail"
+      },
+      "direct_status_bus_over": {
+        "name": "Bus Over"
+      },
+      "direct_status_battery_low": {
+        "name": "Battery Low"
+      },
+      "direct_status_battery_high": {
+        "name": "Battery High"
+      },
+      "direct_status_inverter_overload": {
+        "name": "Inverter Overload"
+      },
+      "direct_status_inverter_on": {
+        "name": "Inverter On"
+      },
+      "direct_status_charging_to_battery": {
+        "name": "Charging to Battery"
+      },
+      "direct_status_charging_ac_active": {
+        "name": "AC Charging Active"
+      },
+      "direct_status_charging_scc_active": {
+        "name": "SCC Charging Active"
+      },
+      "direct_warning_inverter_fault": {
+        "name": "Inverter Fault"
+      },
+      "direct_warning_overload": {
+        "name": "Overload"
+      },
+      "direct_warning_over_temperature": {
+        "name": "Over Temperature"
+      },
+      "direct_warning_fan_locked": {
+        "name": "Fan Locked"
+      },
+      "direct_warning_battery_under_shutdown": {
+        "name": "Battery Shutdown"
+      },
+      "direct_warning_eeprom_fault": {
+        "name": "EEPROM Fault"
+      },
+      "direct_any_warning": {
+        "name": "Any Warning"
+      }
+    },
+    "select": {
+      "battery_mode": {
+        "name": "Battery mode"
+      },
+      "output_priority": {
+        "name": "Output source priority"
+      },
+      "charge_source_priority": {
+        "name": "Charge source priority"
+      },
+      "max_utility_charging_current": {
+        "name": "Max utility charging current"
+      }
+    },
+    "number": {
+      "battery_capacity_ah": {
+        "name": "Battery capacity (Ah)"
+      },
+      "full_charge_sync_voltage": {
+        "name": "Full charge sync voltage"
+      },
+      "discharge_floor_soc": {
+        "name": "Discharge floor"
+      },
+      "float_voltage_window": {
+        "name": "Float voltage window"
+      },
+      "float_noise_floor": {
+        "name": "Float noise floor"
+      }
+    },
+    "switch": {
+      "float_deadband": {
+        "name": "Float deadband"
+      }
+    },
+    "button": {
+      "exit_fault_state": {
+        "name": "Exit fault state"
+      }
+    }
   }
 }

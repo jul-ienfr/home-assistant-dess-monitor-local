@@ -2,8 +2,44 @@
 
 ## Unreleased
 
+### Added
+
+- **The integration now follows the Home Assistant UI language (English and
+  French bundled).** Entity names, configuration/options flows, the select
+  descriptions and the SMG-II warning/fault text are translated. Other
+  languages fall back to English automatically. Dynamic state text lives in
+  `smg2_faults.py`; entity names live in `translations/en.json` and
+  `translations/fr.json`.
+- **SMG-II warning and fault codes are decoded instead of shown as hex.**
+  Warning `0x40` (`0x00000040`) is bit 6 of the warning DWORD: *PV low
+  voltage*. It is normal at night or in deep shade; it only needs wiring
+  checks if it persists in daylight. The fault-summary sensor now exposes
+  `active_warnings` / `warning_keys` / `warning_advice` (and the fault
+  equivalents), a dedicated **Fault and warning advice** sensor states what
+  to do, and the same readable labels are available on the any-warning
+  binary sensor.
+- **Charge source priority now offers "Solar only" (`PCP03`).** SMG-II
+  register 331 value 3 was readable but not writable before.
+
+### Changed
+
+- **Output and charge source priorities use explicit labels and
+  descriptions.** `UtilityFirst` / `SBU` / `Solar` / `SUB` become
+  *Grid first*, *SBU (battery before grid)*, *Solar first*,
+  *SUB (grid before battery)*, with a one-line explanation exposed as the
+  `description` attribute. The machine-readable value stays in
+  `raw_value`; existing `SolarFirst` readbacks are normalised to `Solar`.
+- **Entity names now use Home Assistant's entity-name translations**
+  (`has_entity_name` + `translation_key`). Existing entity IDs and
+  history are preserved by the registry; new installations get the
+  device name plus the translated entity name.
+
 ### Fixed
 
+- **Utility charging current can no longer be set to 110 A or 120 A.**
+  SMG-II register 333 is documented up to 100 A. The select now caps its
+  options at 100 A, or lower when register 332 reports a lower total
+  charge limit, and exposes the cap as `max_allowed_amps`.
 - **Single-device Modbus over an EyBond dongle now polls the inverter.**
   Selecting protocol `modbus` and transport `eybond` in the device wizard
   used to store `modbus://0.0.0.0:8899` and open a Modbus TCP client against

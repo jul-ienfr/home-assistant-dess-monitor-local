@@ -42,6 +42,14 @@ from custom_components.dess_monitor_local.sanity import (
     is_plausible_battery_voltage,
     is_plausible_power,
 )
+from custom_components.dess_monitor_local.smg2_faults import (
+    FAULT_ADVICE,
+    WARNING_ADVICE,
+    WARNING_BY_KEY,
+    fault_label,
+    normalize_language,
+    warning_label,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +95,8 @@ class DirectSensorBase(CoordinatorEntity, SensorEntity):
 class DirectTypedSensorBase(DirectSensorBase):
     """Абстрактный базовый класс для сенсоров, получающих значение по ключу."""
 
+    _attr_has_entity_name = True
+
     def __init__(
             self,
             inverter_device: InverterDevice,
@@ -101,10 +111,13 @@ class DirectTypedSensorBase(DirectSensorBase):
         self.data_key = data_key
 
         suffix = sensor_suffix or data_key
-        name_part = name_suffix or data_key.replace('_', ' ').title()
 
+        # Names live in translations/<lang>.json (entity.sensor.direct_*)
+        # so the whole entity list follows the Home Assistant UI language.
+        # Do not set ``_attr_name``: HA gives it precedence over the
+        # translation key when the attribute exists.
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_direct_{suffix}"
-        self._attr_name = f"{self._inverter_device.name} Direct {name_part}"
+        self._attr_translation_key = f"direct_{suffix}"
 
     @property
     def extra_state_attributes(self):
@@ -666,14 +679,14 @@ def generate_qpiri_sensors(inverter_device, coordinator, *, skip_keys=()):
 
 class DirectDeviceStatusSensor(DirectSensorBase):
     """Главный сенсор с битами как атрибутами."""
-    _attr_name = "Device Status"
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_device_status"
     _attr_icon = "mdi:information-outline"
 
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         """Initialize the sensor."""
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_direct_device_status"
-        self._attr_name = f"{self._inverter_device.name} Direct Device Status"
         # self._inverter_device = inverter_device
 
     @callback
@@ -821,6 +834,27 @@ def _flag_set(flags: dict, base_name: str) -> bool:
     return bool(flags.get(base_name)) or bool(flags.get(f"warn_{base_name}"))
 
 
+def _ui_language(hass) -> str:
+    """Return the two-letter HA UI language, defaulting to English.
+
+    Entity callbacks are also exercised by the HA-free unit tests, where
+    ``self.hass`` is not populated yet, so this helper must tolerate a
+    missing config object.
+    """
+    config = getattr(hass, "config", None)
+    return normalize_language(getattr(config, "language", None))
+
+
+def _join_advice(keys: list[str], table: dict, language: str) -> str | None:
+    """Join the non-empty advice strings for the active keys."""
+    seen: list[str] = []
+    for key in keys:
+        text = table.get(key, {}).get(language)
+        if text and text not in seen:
+            seen.append(text)
+    return " ".join(seen) if seen else None
+
+
 class DirectInverterFaultSummarySensor(DirectSensorBase):
     """Single-glance "what's wrong with the inverter" sensor.
 
@@ -837,14 +871,13 @@ class DirectInverterFaultSummarySensor(DirectSensorBase):
 
     _attr_icon = "mdi:alert-circle-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_fault_summary"
 
     def __init__(self, inverter_device, coordinator):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_direct_fault_summary"
-        )
-        self._attr_name = (
-            f"{inverter_device.name} Direct Inverter Fault Summary"
         )
 
     def _merged_warnings(self) -> dict:
@@ -872,21 +905,74 @@ class DirectInverterFaultSummarySensor(DirectSensorBase):
         fault_code = flags.get("fault_code")
         fault_description = flags.get("fault_description")
         warning_code = flags.get("warning_code")
+        language = _ui_language(getattr(self, "hass", None))
+        fault_prefix = "Défaut" if language == "fr" else "Fault"
+        warning_prefix = "Alerte" if language == "fr" else "Warning"
+
         if isinstance(fault_code, (int, float)) and fault_code != 0:
-            self._attr_native_value = (
-                f"Fault: {fault_description or fault_code}"
-            )
-            self._attr_extra_state_attributes = _flag_attrs(flags)
+            active_faults = list(flags.get("fault_keys") or [])
+            labels = [fault_label(key, language) for key in active_faults]
+            if labels:
+                self._attr_native_value = (
+                    f"{fault_prefix}: {', '.join(labels)}"
+                )
+            else:
+                self._attr_native_value = (
+                    f"{fault_prefix}: "
+                    f"{fault_description or f'code 0x{int(fault_code):08X}'}"
+                )
+            attrs = _flag_attrs(flags)
+            if labels:
+                attrs["active_faults"] = labels
+                attrs["fault_keys"] = active_faults
+                advice = _join_advice(active_faults, FAULT_ADVICE, language)
+                if advice:
+                    attrs["fault_advice"] = advice
+            self._attr_extra_state_attributes = attrs
             self.async_write_ha_state()
             return
+
         if isinstance(warning_code, (int, float)) and warning_code != 0:
-            # SMG-II direct-Modbus path: the per-bit decomposition isn't
-            # public, so we show the raw hex. Users with agent access
-            # get a richer breakdown via warn_* flags instead.
-            self._attr_native_value = (
-                f"Warning: SMG-II code 0x{int(warning_code):08X}"
-            )
-            self._attr_extra_state_attributes = _flag_attrs(flags)
+            active_warnings = list(flags.get("warning_keys") or [])
+            if active_warnings:
+                severity = {
+                    key: index
+                    for index, (key, _display) in enumerate(
+                        _WARNING_SEVERITY_ORDER
+                    )
+                }
+                active_warnings.sort(
+                    key=lambda key: severity.get(key, len(severity))
+                )
+                labels = [
+                    warning_label(key, language) for key in active_warnings
+                ]
+                suffix = ""
+                if len(labels) > 1:
+                    suffix = (
+                        f" (+{len(labels) - 1} de plus)"
+                        if language == "fr"
+                        else f" (+{len(labels) - 1} more)"
+                    )
+                self._attr_native_value = (
+                    f"{warning_prefix}: {labels[0]}{suffix}"
+                )
+                attrs = _flag_attrs(flags)
+                attrs["active_warnings"] = labels
+                attrs["warning_keys"] = active_warnings
+                advice = _join_advice(
+                    active_warnings, WARNING_ADVICE, language
+                )
+                if advice:
+                    attrs["warning_advice"] = advice
+            else:
+                # A code outside the published map (or an older payload
+                # without decoded keys) still gets a readable fallback.
+                self._attr_native_value = (
+                    f"{warning_prefix}: code 0x{int(warning_code):08X}"
+                )
+                attrs = _flag_attrs(flags)
+            self._attr_extra_state_attributes = attrs
             self.async_write_ha_state()
             return
 
@@ -895,7 +981,11 @@ class DirectInverterFaultSummarySensor(DirectSensorBase):
         first_active = None
         for key, display in _WARNING_SEVERITY_ORDER:
             if _flag_set(flags, key):
-                first_active = display
+                first_active = (
+                    warning_label(key, language)
+                    if key in WARNING_BY_KEY
+                    else display
+                )
                 break
 
         # Count total unique active bits across both conventions to size
@@ -919,13 +1009,20 @@ class DirectInverterFaultSummarySensor(DirectSensorBase):
             self._attr_native_value = "OK"
         elif first_active is None:
             # Only uncataloged warn_* bits set — name the count.
-            self._attr_native_value = f"Warning: {total_active} active"
-        elif total_active > 1:
             self._attr_native_value = (
-                f"Warning: {first_active} (+{total_active - 1} more)"
+                f"{warning_prefix}: {total_active} active"
+            )
+        elif total_active > 1:
+            suffix = (
+                f" (+{total_active - 1} de plus)"
+                if language == "fr"
+                else f" (+{total_active - 1} more)"
+            )
+            self._attr_native_value = (
+                f"{warning_prefix}: {first_active}{suffix}"
             )
         else:
-            self._attr_native_value = f"Warning: {first_active}"
+            self._attr_native_value = f"{warning_prefix}: {first_active}"
 
         self._attr_extra_state_attributes = _flag_attrs(flags)
         self.async_write_ha_state()
@@ -943,16 +1040,99 @@ def _flag_attrs(flags: dict) -> dict:
     for key, value in flags.items():
         if key.startswith("_reserved_"):
             continue
+        if key in ("has_fault", "has_warning"):
+            # Meta-flags: useful for templates, but they are not one of
+            # the individual active conditions counted by active_count.
+            attrs[key] = value
+            continue
         if isinstance(value, bool):
             attrs[key] = value
             if value:
                 active += 1
         else:
-            # Non-boolean fields (fault_code, fault_description, has_fault)
-            # — pass through verbatim.
+            # Non-boolean fields (fault_code, warning_code, lists,
+            # descriptions) pass through verbatim.
             attrs[key] = value
     attrs["active_count"] = active
     return attrs
+
+
+class DirectFaultAdviceSensor(DirectSensorBase):
+    """Actionable advice for the active fault or warning.
+
+    The fault-summary sensor answers *what* is active; this one answers
+    *what to do about it*. Its state is the plain-language advice for the
+    active SMG-II fault/warning bits, translated to the HA UI language.
+    """
+
+    _attr_icon = "mdi:lightbulb-alert-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_fault_advice"
+
+    def __init__(self, inverter_device, coordinator):
+        super().__init__(inverter_device, coordinator)
+        self._attr_unique_id = (
+            f"{inverter_device.inverter_id}_direct_fault_advice"
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        qpiws = self.data.get("qpiws", {}) or {}
+        qfws = self.data.get("qfws", {}) or {}
+        merged = dict(qpiws)
+        for key, value in qfws.items():
+            merged.setdefault(key, value)
+
+        language = _ui_language(getattr(self, "hass", None))
+        active_faults = list(merged.get("fault_keys") or [])
+        active_warnings = list(merged.get("warning_keys") or [])
+
+        advice = _join_advice(active_faults, FAULT_ADVICE, language)
+        if advice is None:
+            advice = _join_advice(active_warnings, WARNING_ADVICE, language)
+
+        has_active_bit = any(
+            bool(value)
+            for key, value in merged.items()
+            if isinstance(value, bool)
+            and value
+            and key not in ("has_fault", "has_warning")
+            and not key.startswith("_reserved_")
+        )
+        fault_code = merged.get("fault_code")
+        warning_code = merged.get("warning_code")
+        has_code = (
+            isinstance(fault_code, (int, float)) and fault_code != 0
+        ) or (
+            isinstance(warning_code, (int, float)) and warning_code != 0
+        )
+
+        if advice is None:
+            if has_code or has_active_bit:
+                advice = (
+                    "No detailed advice is available for this code. "
+                    "Check the fault-summary attributes and the inverter manual."
+                    if language == "en"
+                    else "Aucun conseil détaillé n'est disponible pour ce code. "
+                    "Consultez les attributs du résumé des défauts et la notice "
+                    "de l'onduleur."
+                )
+            else:
+                advice = (
+                    "No active fault or warning."
+                    if language == "en"
+                    else "Aucun défaut ni alerte active."
+                )
+
+        self._attr_native_value = advice
+        attrs: dict = {}
+        if active_faults:
+            attrs["fault_keys"] = active_faults
+        if active_warnings:
+            attrs["warning_keys"] = active_warnings
+        self._attr_extra_state_attributes = attrs
+        self.async_write_ha_state()
 
 
 # Sensors that depend on QPIGS/QPIGS2 fields SMG-II does not report. They
@@ -995,6 +1175,7 @@ DIRECT_SENSORS = [
     DirectBatteryPowerSensor,
     DirectOperatingModeSensor,
     DirectInverterFaultSummarySensor,
+    DirectFaultAdviceSensor,
 ]
 
 

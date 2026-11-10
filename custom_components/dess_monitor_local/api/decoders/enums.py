@@ -134,6 +134,7 @@ class ChargeSourcePrioritySetting(Enum):
     UTILITY_FIRST = "PCP00"
     SOLAR_FIRST = "PCP01"
     SOLAR_AND_UTILITY = "PCP02"
+    ONLY_SOLAR = "PCP03"
 
 
 @unique

@@ -41,7 +41,7 @@ class EybondHubDiscoverySensor(SensorEntity):
     """Number of dongles discovered on the hub, with a per-dongle list."""
 
     _attr_has_entity_name = True
-    _attr_name = "Discovered dongles"
+    _attr_translation_key = "discovered_dongles"
     _attr_icon = "mdi:lan-connect"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = "dongles"

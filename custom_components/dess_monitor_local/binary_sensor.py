@@ -36,6 +36,16 @@ from custom_components.dess_monitor_local.coordinators.direct_coordinator import
     DirectCoordinator,
 )
 from custom_components.dess_monitor_local.hub import InverterDevice
+from custom_components.dess_monitor_local.smg2_faults import (
+    fault_label,
+    normalize_language,
+    warning_label,
+)
+
+
+def _ui_language(hass) -> str:
+    config = getattr(hass, "config", None)
+    return normalize_language(getattr(config, "language", None))
 
 # (status-key, sensor-suffix, human name, device_class). The parser
 # normalises bits to True/False, so we just look them up by key.
@@ -142,6 +152,8 @@ class _StatusBitBinarySensor(CoordinatorEntity, BinarySensorEntity):
     parser semantics ever change.
     """
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         inverter_device: InverterDevice,
@@ -162,7 +174,7 @@ class _StatusBitBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_direct_{sensor_suffix}"
         )
-        self._attr_name = f"{inverter_device.name} Direct {name}"
+        self._attr_translation_key = f"direct_status_{sensor_suffix}"
         if device_class is not None:
             self._attr_device_class = device_class
 
@@ -210,6 +222,8 @@ class _WarningFlagBinarySensor(CoordinatorEntity, BinarySensorEntity):
     section is populated — both are checked, the warning is ON if either
     reports it."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         inverter_device: InverterDevice,
@@ -226,7 +240,7 @@ class _WarningFlagBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_direct_warning_{sensor_suffix}"
         )
-        self._attr_name = f"{inverter_device.name} Direct {name}"
+        self._attr_translation_key = f"direct_warning_{sensor_suffix}"
         if device_class is not None:
             self._attr_device_class = device_class
 
@@ -282,6 +296,8 @@ class _AnyWarningBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_icon = "mdi:alert"
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_any_warning"
 
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         super().__init__(coordinator)
@@ -289,7 +305,6 @@ class _AnyWarningBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_direct_any_warning"
         )
-        self._attr_name = f"{inverter_device.name} Direct Any Warning"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -314,11 +329,30 @@ class _AnyWarningBinarySensor(CoordinatorEntity, BinarySensorEntity):
             dev = self.coordinator.data[self._inverter_device.inverter_id]
         except (KeyError, TypeError):
             self._attr_is_on = None
+            self._attr_extra_state_attributes = {}
             self.async_write_ha_state()
             return
 
         qpiws = dev.get("qpiws", {}) or {}
         qfws = dev.get("qfws", {}) or {}
+        language = _ui_language(getattr(self, "hass", None))
+
+        # SMG-II/Modbus exposes decoded stable keys; translate them for
+        # the user while keeping the machine-readable keys in attributes.
+        active_faults = list(qfws.get("fault_keys") or [])
+        active_warnings = list(qfws.get("warning_keys") or [])
+        attrs: dict = {}
+        if active_faults:
+            attrs["active_faults"] = [
+                fault_label(key, language) for key in active_faults
+            ]
+            attrs["fault_keys"] = active_faults
+        if active_warnings:
+            attrs["active_warnings"] = [
+                warning_label(key, language) for key in active_warnings
+            ]
+            attrs["warning_keys"] = active_warnings
+        self._attr_extra_state_attributes = attrs
 
         # PI18 / SMG-II explicit fault_code or warning_code wins immediately.
         fault_code = qfws.get("fault_code")

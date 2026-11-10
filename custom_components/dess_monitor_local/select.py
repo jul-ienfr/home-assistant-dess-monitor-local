@@ -31,6 +31,167 @@ BATTERY_MODE_LEAD_ACID = "Lead-acid"
 BATTERY_MODES = (BATTERY_MODE_LI_VOLTAGE, BATTERY_MODE_LI_BMS, BATTERY_MODE_LEAD_ACID)
 
 
+def _ui_language(hass) -> str:
+    """Return the HA UI language, defaulting to English."""
+    language = getattr(getattr(hass, "config", None), "language", None) or "en"
+    return "fr" if str(language).lower().startswith("fr") else "en"
+
+
+# (stable raw value, labels, description)
+_OUTPUT_PRIORITY_CHOICES: tuple[
+    tuple[str, dict[str, str], dict[str, str]], ...
+] = (
+    (
+        "UtilityFirst",
+        {"en": "Grid first", "fr": "Réseau d'abord"},
+        {
+            "en": (
+                "Grid powers the loads. Solar and battery are backup; "
+                "the battery stays charged."
+            ),
+            "fr": (
+                "Le réseau alimente les charges. Le solaire et la batterie "
+                "sont en secours ; la batterie reste chargée."
+            ),
+        },
+    ),
+    (
+        "Solar",
+        {"en": "Solar first", "fr": "Solaire d'abord"},
+        {
+            "en": (
+                "Solar powers the loads, then the battery, then the grid. "
+                "The grid takes over when solar is unavailable or the "
+                "battery is low."
+            ),
+            "fr": (
+                "Le solaire alimente les charges, puis la batterie, puis le "
+                "réseau. Le réseau prend le relais quand le solaire manque "
+                "ou que la batterie est basse."
+            ),
+        },
+    ),
+    (
+        "SBU",
+        {
+            "en": "SBU (battery before grid)",
+            "fr": "SBU (batterie avant réseau)",
+        },
+        {
+            "en": (
+                "Solar → battery → grid. The battery is used down to its "
+                "low-voltage cutoff before switching to the grid."
+            ),
+            "fr": (
+                "Solaire → batterie → réseau. La batterie est utilisée "
+                "jusqu'à son seuil bas avant de passer au réseau."
+            ),
+        },
+    ),
+    (
+        "SUB",
+        {"en": "SUB (grid before battery)", "fr": "SUB (réseau avant batterie)"},
+        {
+            "en": (
+                "Solar → grid → battery. The grid supplements solar; the "
+                "battery is kept as reserve and used only without grid."
+            ),
+            "fr": (
+                "Solaire → réseau → batterie. Le réseau complète le solaire ; "
+                "la batterie est gardée en réserve et utilisée seulement "
+                "sans réseau."
+            ),
+        },
+    ),
+)
+
+_CHARGE_SOURCE_CHOICES: tuple[
+    tuple[str, dict[str, str], dict[str, str]], ...
+] = (
+    (
+        "UtilityFirst",
+        {"en": "Grid first", "fr": "Réseau d'abord"},
+        {
+            "en": (
+                "The grid charges the battery first; solar charges only "
+                "when the grid is unavailable."
+            ),
+            "fr": (
+                "Le réseau charge la batterie en priorité ; le solaire ne "
+                "charge que lorsque le réseau est absent."
+            ),
+        },
+    ),
+    (
+        "SolarFirst",
+        {
+            "en": "Solar first (grid backup)",
+            "fr": "Solaire d'abord (réseau en secours)",
+        },
+        {
+            "en": (
+                "Solar charges the battery first; the grid charges only "
+                "when solar production is unavailable."
+            ),
+            "fr": (
+                "Le solaire charge la batterie en priorité ; le réseau ne "
+                "charge que lorsque la production solaire est absente."
+            ),
+        },
+    ),
+    (
+        "SolarAndUtility",
+        {
+            "en": "Solar + grid together",
+            "fr": "Solaire + réseau ensemble",
+        },
+        {
+            "en": "Solar and grid charge the battery at the same time.",
+            "fr": "Le solaire et le réseau chargent la batterie en même temps.",
+        },
+    ),
+    (
+        "OnlySolar",
+        {
+            "en": "Solar only (no grid charging)",
+            "fr": "Solaire uniquement (pas de charge réseau)",
+        },
+        {
+            "en": (
+                "Only solar charges the battery. The grid never charges it, "
+                "even when available."
+            ),
+            "fr": (
+                "Seul le solaire charge la batterie. Le réseau ne la charge "
+                "jamais, même lorsqu'il est disponible."
+            ),
+        },
+    ),
+)
+
+_UTILITY_CURRENT_STEPS = (2, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+
+
+def max_utility_charging_current_options(qpiri: dict | None) -> list[str]:
+    """Return valid utility-charge-current steps for this inverter.
+
+    Register 333 is documented up to 100 A; the old hard-coded list
+    offered 110 A and 120 A, which the SMG-II rejects.  When the inverter
+    reports a lower total charge limit (register 332), that lower value
+    is used as the cap instead.
+    """
+    cap = 100
+    raw = (qpiri or {}).get("max_charging_current")
+    try:
+        reported = int(float(raw))
+    except (TypeError, ValueError):
+        reported = 0
+    if reported >= _UTILITY_CURRENT_STEPS[0]:
+        cap = min(cap, reported)
+    options = [str(value) for value in _UTILITY_CURRENT_STEPS if value <= cap]
+    return options or [str(_UTILITY_CURRENT_STEPS[1])]
+
+
 #
 # SCAN_INTERVAL = timedelta(seconds=30)
 # PARALLEL_UPDATES = 1
@@ -69,11 +230,12 @@ class BatteryModeSelect(SelectEntity, RestoreEntity):
     _attr_options = list(BATTERY_MODES)
     _attr_icon = "mdi:battery-sync"
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_has_entity_name = True
+    _attr_translation_key = "battery_mode"
 
     def __init__(self, inverter_device: InverterDevice):
         self._inverter_device = inverter_device
         self._attr_unique_id = f"{inverter_device.inverter_id}_battery_mode"
-        self._attr_name = f"{inverter_device.name} vSoC Battery Mode"
         # Default preserves the existing (LFP voltage-based) behavior so
         # existing users don't see their SoC sensor change after upgrade.
         self._attr_current_option = BATTERY_MODE_LI_VOLTAGE
@@ -160,100 +322,167 @@ def resolve_max_utility_charging_current(device_data):
     return (device_data.get('qpiri') or {}).get('max_utility_charging_current')
 
 
-class InverterOutputPrioritySelect(SelectBase):
-    _attr_current_option = None
+class _LocalizedPrioritySelect(SelectBase):
+    """Select whose options are translated for the HA UI language.
+
+    The raw value (``UtilityFirst``, ``SBU``, …) stays available in the
+    ``raw_value`` attribute so automations do not have to depend on the
+    translated label.
+    """
+
+    _choices: tuple[tuple[str, dict[str, str], dict[str, str]], ...] = ()
+    _raw_aliases: dict[str, str] = {}
+    _attr_has_entity_name = True
+
+    def __init__(self, inverter_device, coordinator):
+        super().__init__(inverter_device, coordinator)
+        self._raw_option: str | None = None
+
+    def _language(self) -> str:
+        return _ui_language(getattr(self, "hass", None))
+
+    def _normalize_raw(self, raw) -> str | None:
+        if raw is None:
+            return None
+        value = str(raw)
+        value = self._raw_aliases.get(value, value)
+        return value if any(choice[0] == value for choice in self._choices) else None
+
+    @property
+    def options(self) -> list[str]:
+        language = self._language()
+        return [labels[language] for _raw, labels, _desc in self._choices]
+
+    @property
+    def current_option(self) -> str | None:
+        raw = self._normalize_raw(self._raw_option)
+        if raw is None:
+            return None
+        language = self._language()
+        for value, labels, _desc in self._choices:
+            if value == raw:
+                return labels[language]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        raw = self._normalize_raw(self._raw_option)
+        if raw is None:
+            return {}
+        language = self._language()
+        for value, _labels, descriptions in self._choices:
+            if value == raw:
+                return {
+                    "raw_value": raw,
+                    "description": descriptions[language],
+                }
+        return {"raw_value": raw}
+
+    def _raw_for_option(self, option: str) -> str | None:
+        for value, labels, _desc in self._choices:
+            if option == value or option in labels.values():
+                return value
+        return None
+
+
+class InverterOutputPrioritySelect(_LocalizedPrioritySelect):
+    _attr_translation_key = "output_priority"
+    _choices = _OUTPUT_PRIORITY_CHOICES
+    # Older releases exposed SolarFirst as "Solar"; keep existing YAML
+    # automations working after the label/option rewrite.
+    _raw_aliases = {"SolarFirst": "Solar"}
 
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_output_priority"
-        self._attr_name = f"{self._inverter_device.name} Output Priority"
-        self._attr_options = ['UtilityFirst', 'SBU', 'Solar', 'SUB']
 
         if coordinator.data is not None:
             data = coordinator.data.get(self._inverter_device.inverter_id) or {}
-            # device_data = self._inverter_device.device_data
-            # print('device_data')
-            output_source_priority = resolve_output_priority(data)
-            self._attr_current_option = output_source_priority
-            # self._attr_current_option = resolve_output_priority(data, device_data)
+            self._raw_option = self._normalize_raw(
+                resolve_output_priority(data)
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.data
-        # device_data = self._inverter_device.device_data
-        mapper = {
-            'UtilityFirst': 'UtilityFirst',
-            'SBU': 'SBU',
-            'Solar': 'Solar',
-            'SolarFirst': 'Solar',
-            'SUB': 'SUB',
-        }
-        priority = resolve_output_priority(data)
-        mapped_priority = mapper.get(priority, priority)
-        self._attr_current_option = mapped_priority
+        self._raw_option = self._normalize_raw(
+            resolve_output_priority(self.data)
+        )
         self.async_write_ha_state()
 
     async def async_select_option(self, option: str):
-        if option in self._attr_options:
-            map_priority = {
-                'UtilityFirst': OutputSourcePrioritySetting.UTILITY_FIRST,
-                'SBU': OutputSourcePrioritySetting.SBU_PRIORITY,
-                'Solar': OutputSourcePrioritySetting.SOLAR_FIRST,
-                'SUB': OutputSourcePrioritySetting.SUB_PRIORITY,
-            }
-            queue = await get_command_queue(self.hass, self._inverter_device.device_data)
-            result = await queue.enqueue(
-                lambda: set_output_source_priority(self._inverter_device.device_data, map_priority[option]))
-            if isinstance(result, dict) and result.get("error"):
-                _LOGGER.warning(
-                    "Output priority write failed for %s: %s",
-                    self._inverter_device.name, result["error"],
-                )
-                return
-            self._attr_current_option = option
-            self.async_write_ha_state()
-            self.coordinator.force_section("qpiri")
+        raw = self._raw_for_option(option)
+        if raw is None:
+            return
+        map_priority = {
+            'UtilityFirst': OutputSourcePrioritySetting.UTILITY_FIRST,
+            'SBU': OutputSourcePrioritySetting.SBU_PRIORITY,
+            'Solar': OutputSourcePrioritySetting.SOLAR_FIRST,
+            'SUB': OutputSourcePrioritySetting.SUB_PRIORITY,
+        }
+        queue = await get_command_queue(self.hass, self._inverter_device.device_data)
+        result = await queue.enqueue(
+            lambda: set_output_source_priority(
+                self._inverter_device.device_data, map_priority[raw]
+            )
+        )
+        if isinstance(result, dict) and result.get("error"):
+            _LOGGER.warning(
+                "Output priority write failed for %s: %s",
+                self._inverter_device.name, result["error"],
+            )
+            return
+        self._raw_option = raw
+        self.async_write_ha_state()
+        self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()
 
 
-class InverterChargeSourcePrioritySelect(SelectBase):
-    _attr_current_option = None
+class InverterChargeSourcePrioritySelect(_LocalizedPrioritySelect):
+    _attr_translation_key = "charge_source_priority"
+    _choices = _CHARGE_SOURCE_CHOICES
 
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_charge_source_priority"
-        self._attr_name = f"{self._inverter_device.name} Charge Source Priority"
-        self._attr_options = ['UtilityFirst', 'SolarFirst', 'SolarAndUtility']  ## ChargeSourcePriority
 
         if coordinator.data is not None:
             data = coordinator.data.get(self._inverter_device.inverter_id) or {}
-            self._attr_current_option = resolve_chrage_source_priority(data)
+            self._raw_option = self._normalize_raw(
+                resolve_chrage_source_priority(data)
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.data
-        self._attr_current_option = resolve_chrage_source_priority(data)
+        self._raw_option = self._normalize_raw(
+            resolve_chrage_source_priority(self.data)
+        )
         self.async_write_ha_state()
 
     async def async_select_option(self, option: str):
-        if option in self._attr_options:
-            map_priority = {
-                'UtilityFirst': ChargeSourcePrioritySetting.UTILITY_FIRST,
-                'SolarFirst': ChargeSourcePrioritySetting.SOLAR_FIRST,
-                'SolarAndUtility': ChargeSourcePrioritySetting.SOLAR_AND_UTILITY,
-            }
-            queue = await get_command_queue(self.hass, self._inverter_device.device_data)
-            result = await queue.enqueue(
-                lambda: set_charge_source_priority(self._inverter_device.device_data, map_priority[option]))
-            if isinstance(result, dict) and result.get("error"):
-                _LOGGER.warning(
-                    "Charge source priority write failed for %s: %s",
-                    self._inverter_device.name, result["error"],
-                )
-                return
-            self._attr_current_option = option
-            self.async_write_ha_state()
-            self.coordinator.force_section("qpiri")
+        raw = self._raw_for_option(option)
+        if raw is None:
+            return
+        map_priority = {
+            'UtilityFirst': ChargeSourcePrioritySetting.UTILITY_FIRST,
+            'SolarFirst': ChargeSourcePrioritySetting.SOLAR_FIRST,
+            'SolarAndUtility': ChargeSourcePrioritySetting.SOLAR_AND_UTILITY,
+            'OnlySolar': ChargeSourcePrioritySetting.ONLY_SOLAR,
+        }
+        queue = await get_command_queue(self.hass, self._inverter_device.device_data)
+        result = await queue.enqueue(
+            lambda: set_charge_source_priority(
+                self._inverter_device.device_data, map_priority[raw]
+            )
+        )
+        if isinstance(result, dict) and result.get("error"):
+            _LOGGER.warning(
+                "Charge source priority write failed for %s: %s",
+                self._inverter_device.name, result["error"],
+            )
+            return
+        self._raw_option = raw
+        self.async_write_ha_state()
+        self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()
 
 
@@ -268,26 +497,49 @@ def _normalize_amps(raw) -> str | None:
 
 
 class InverterMaxUtilityChargingCurrentNumber(SelectBase):
+    _attr_has_entity_name = True
+    _attr_translation_key = "max_utility_charging_current"
+
     def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
         super().__init__(inverter_device, coordinator)
         self._attr_unique_id = f"{self._inverter_device.inverter_id}_max_utility_charging_current"
-        self._attr_name = f"{self._inverter_device.name} Max Utility Charging Current"
-        self._attr_options = ['2', '10', '20', '30', '40', '50', '60', '70', '80', '90', '100', '110', '120']
         self._raw_readback: str | None = None
+        data = (coordinator.data or {}).get(
+            self._inverter_device.inverter_id
+        ) or {}
+        self._attr_options = max_utility_charging_current_options(
+            data.get("qpiri")
+        )
 
         if coordinator.data is not None:
-            data = coordinator.data.get(self._inverter_device.inverter_id) or {}
             raw = resolve_max_utility_charging_current(data)
             self._raw_readback = raw if raw is None else str(raw)
-            self._attr_current_option = _normalize_amps(raw)
+            normalized = _normalize_amps(raw)
+            self._attr_current_option = (
+                normalized if normalized in self._attr_options else None
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
         data = self.data
+        self._attr_options = max_utility_charging_current_options(
+            data.get("qpiri")
+        )
         raw = resolve_max_utility_charging_current(data)
         self._raw_readback = raw if raw is None else str(raw)
-        self._attr_current_option = _normalize_amps(raw)
+        normalized = _normalize_amps(raw)
+        self._attr_current_option = (
+            normalized if normalized in self._attr_options else None
+        )
         self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {
+            "max_allowed_amps": max(
+                (int(option) for option in self._attr_options), default=None
+            )
+        }
 
     async def async_select_option(self, option: str):
         if option in self._attr_options:

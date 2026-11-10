@@ -69,6 +69,8 @@ class SMG2ExitFaultButton(ButtonEntity):
     ``button.press`` service from automations."""
 
     _attr_icon = "mdi:restart-alert"
+    _attr_has_entity_name = True
+    _attr_translation_key = "exit_fault_state"
 
     def __init__(
         self,
@@ -82,7 +84,6 @@ class SMG2ExitFaultButton(ButtonEntity):
         self._attr_unique_id = (
             f"{inverter_device.inverter_id}_exit_fault_state"
         )
-        self._attr_name = f"{inverter_device.name} Exit Fault State"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, inverter_device.inverter_id)},
             name=inverter_device.name,

@@ -200,6 +200,8 @@ class ModbusAdapter(BaseAdapter):
             ChargeSourcePrioritySetting.UTILITY_FIRST: 0,
             ChargeSourcePrioritySetting.SOLAR_FIRST: 1,
             ChargeSourcePrioritySetting.SOLAR_AND_UTILITY: 2,
+            # SMG-II register 331: 3 = only PV charging is allowed.
+            ChargeSourcePrioritySetting.ONLY_SOLAR: 3,
         }
         value = mapping.get(mode)
         if value is None:

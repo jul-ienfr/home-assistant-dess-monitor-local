@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 
+from ...smg2_faults import fault_keys, fault_label, warning_keys, warning_label
 from ..crc import crc16_modbus
 from ..decoders.enums import (
     ACInputVoltageRange,
@@ -287,11 +288,12 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
     same register map works over TCP or through an EyBond dongle (FC=4).
 
     Returns (sensors, config, faults). Faults is a dict containing
-    ``fault_code`` / ``warning_code`` (32-bit DWORD each) plus derived
-    convenience booleans. Per the published SMG-II protocol the
-    per-bit decomposition isn't public — we surface the raw code and
-    a ``has_fault`` / ``has_warning`` flag, which is enough to drive
-    the integration's any_warning binary_sensor and fault summary.
+    ``fault_code`` / ``warning_code`` (32-bit DWORD each) plus the
+    decoded stable keys (``fault_keys`` / ``warning_keys``), their
+    English labels, and derived ``has_fault`` / ``has_warning`` flags.
+    The per-bit map comes from the published SMG-II register table; the
+    Home Assistant entities translate the keys into the configured UI
+    language.
     """
     # Block 100-115 covers fault_code (100, 2 words) and warning_code
     # (108, 2 words) per the SMG-II Modbus map. Reading the whole 16-word
@@ -306,15 +308,36 @@ async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
     if block_100 is not None and len(block_100) >= 10:
         fault_code = (block_100[0] << 16) | block_100[1]   # regs 100-101
         warning_code = (block_100[8] << 16) | block_100[9]  # regs 108-109
+        active_faults = fault_keys(fault_code)
+        active_warnings = warning_keys(warning_code)
         faults = {
             "fault_code": fault_code,
             "warning_code": warning_code,
             "has_fault": fault_code != 0,
             "has_warning": warning_code != 0,
+            "fault_keys": active_faults,
+            "warning_keys": active_warnings,
+            "fault_names": [
+                # English labels are also kept here for non-HA consumers.
+                fault_label(key) for key in active_faults
+            ],
+            "warning_names": [
+                warning_label(key) for key in active_warnings
+            ],
             "fault_description": (
-                f"SMG-II fault 0x{fault_code:08X}" if fault_code else None
+                "; ".join(fault_label(key) for key in active_faults) or None
+            ),
+            "warning_description": (
+                "; ".join(warning_label(key) for key in active_warnings) or None
             ),
         }
+        # Expose every active bit as a warn_* / fault_* boolean so the
+        # existing generic warning pipeline (severity walk, any-warning
+        # sensor, attributes) works without special-casing Modbus.
+        for key in active_warnings:
+            faults[f"warn_{key}"] = True
+        for key in active_faults:
+            faults[f"fault_{key}"] = True
 
     block_200 = await read_block(201, 31)
 

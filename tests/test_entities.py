@@ -250,3 +250,100 @@ class TestOfflineChildCrashSafety:
         assert sel.resolve_output_priority({}) is None
         assert sel.resolve_chrage_source_priority({}) is None
         assert sel.resolve_max_utility_charging_current({}) is None
+
+
+# ---------------------------------------------------------------------------
+# Utility charging current cap (register 333 is documented up to 100 A)
+# ---------------------------------------------------------------------------
+class TestUtilityCurrentOptions:
+    def test_default_cap_is_100(self):
+        from custom_components.dess_monitor_local import select as sel
+        options = sel.max_utility_charging_current_options(None)
+        assert options[-1] == "100"
+        assert "110" not in options
+        assert "120" not in options
+
+    def test_lower_reported_limit_wins(self):
+        from custom_components.dess_monitor_local import select as sel
+        options = sel.max_utility_charging_current_options(
+            {"max_charging_current": "60"}
+        )
+        assert options[-1] == "60"
+
+    def test_zero_or_garbage_falls_back_to_100(self):
+        from custom_components.dess_monitor_local import select as sel
+        for value in (0, None, "n/a"):
+            options = sel.max_utility_charging_current_options(
+                {"max_charging_current": value}
+            )
+            assert options[-1] == "100"
+
+    def test_entity_caps_options_from_qpiri(self):
+        from custom_components.dess_monitor_local import select as sel
+        ent = sel.InverterMaxUtilityChargingCurrentNumber(
+            _Dev(), _Coord({"qpiri": {"max_charging_current": 50}})
+        )
+        assert ent.options[-1] == "50"
+        assert ent.extra_state_attributes["max_allowed_amps"] == 50
+
+
+class TestPriorityChoices:
+    def test_charge_select_offers_only_solar(self):
+        from custom_components.dess_monitor_local import select as sel
+        raw = [choice[0] for choice in sel._CHARGE_SOURCE_CHOICES]
+        assert "OnlySolar" in raw
+        assert raw == ["UtilityFirst", "SolarFirst", "SolarAndUtility", "OnlySolar"]
+
+    def test_output_labels_are_explicit(self):
+        from custom_components.dess_monitor_local import select as sel
+        ent = sel.InverterOutputPrioritySelect(_Dev(), _Coord({}))
+        assert "SBU (battery before grid)" in ent.options
+        assert "SUB (grid before battery)" in ent.options
+        # French labels follow the HA language.
+        ent.hass = type("H", (), {"config": type("C", (), {"language": "fr"})()})()
+        assert "SBU (batterie avant réseau)" in ent.options
+
+    def test_raw_alias_keeps_old_solarfirst_readable(self):
+        from custom_components.dess_monitor_local import select as sel
+        ent = sel.InverterOutputPrioritySelect(
+            _Dev(), _Coord({"qpiri": {"output_source_priority": "SolarFirst"}})
+        )
+        assert ent.extra_state_attributes.get("raw_value") == "Solar"
+
+
+class TestFaultAdviceSensor:
+    def test_pv_low_voltage_gives_actionable_advice(self):
+        ent = _make(ds.DirectFaultAdviceSensor, {
+            "qfws": {
+                "warning_code": 0x40,
+                "warning_keys": ["pv_low_voltage"],
+                "warn_pv_low_voltage": True,
+            },
+        })
+        ent._handle_coordinator_update()
+        assert "night" in ent._attr_native_value
+        assert ent._attr_extra_state_attributes["warning_keys"] == ["pv_low_voltage"]
+
+    def test_fault_advice_takes_priority(self):
+        ent = _make(ds.DirectFaultAdviceSensor, {
+            "qfws": {
+                "fault_code": 1 << 2,
+                "fault_keys": ["battery_voltage_high"],
+                "warning_code": 0x40,
+                "warning_keys": ["pv_low_voltage"],
+            },
+        })
+        ent._handle_coordinator_update()
+        assert "Stop charging" in ent._attr_native_value
+
+    def test_no_active_condition(self):
+        ent = _make(ds.DirectFaultAdviceSensor, {"qpiws": {}, "qfws": {}})
+        ent._handle_coordinator_update()
+        assert ent._attr_native_value == "No active fault or warning."
+
+    def test_unmapped_code_is_honest(self):
+        ent = _make(ds.DirectFaultAdviceSensor, {
+            "qfws": {"fault_code": 2},
+        })
+        ent._handle_coordinator_update()
+        assert "No detailed advice" in ent._attr_native_value
