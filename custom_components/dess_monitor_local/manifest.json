@@ -1,0 +1,25 @@
+{
+  "domain": "dess_monitor_local",
+  "name": "DESS Monitor Local",
+  "after_dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "codeowners": [
+    "@jul-ienfr"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/jul-ienfr/home-assistant-dess-monitor-local/blob/main/INTEGRATION.md",
+  "homekit": {},
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jul-ienfr/home-assistant-dess-monitor-local/issues",
+  "requirements": [
+    "pyserial-asyncio-fast==0.16"
+  ],
+  "ssdp": [],
+  "version": "1.1.0-beta.3-anenji.3",
+  "zeroconf": []
+}

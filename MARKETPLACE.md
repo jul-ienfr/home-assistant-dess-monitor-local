@@ -60,18 +60,19 @@ Références :
 
 ## Structure de ce dépôt
 
-| Branche | Contenu | Rôle |
-|---------|---------|------|
-| `archive/dess-monitor-local` | `hacs.json`, `custom_components/dess_monitor_local/`, README de l'intégration | **Branche par défaut**, installée par le Marketplace |
-| `main` | Firmware ESPHome Anenji (`anenji.yaml`, docs, outils) | Projet ESPHome |
+Tout est sur la branche `main`, qui est la branche par défaut :
 
-La branche par défaut a été basculée sur `archive/dess-monitor-local` parce
-que le Marketplace cherche `hacs.json` et `custom_components/` sur la branche
-par défaut. `main` reste le firmware ESPHome et n'est pas une version de
-l'intégration.
+| Élément | Contenu |
+|---------|---------|
+| `hacs.json` | métadonnées Marketplace |
+| `custom_components/dess_monitor_local/` | intégration DESS Monitor Local |
+| `INTEGRATION.md` | documentation de l'intégration |
+| `README.md` | documentation du firmware ESPHome |
+| `anenji.yaml` et le reste | firmware ESPHome Anenji |
 
-Conséquence : **toute nouvelle release de l'intégration doit être taguée sur
-`archive/dess-monitor-local`**, jamais sur `main`.
+Le Marketplace cherche `hacs.json` et `custom_components/` sur la branche par
+défaut : c'est pourquoi ils sont à la racine de `main`. Il n'y a plus de
+branche d'intégration séparée.
 
 ## Installer l'intégration
 
@@ -94,10 +95,10 @@ délai de quelques heures est donc normal.
 
 ## Publier une nouvelle version
 
-1. Se placer sur la branche d'intégration :
+1. Se placer sur `main` :
 
    ```bash
-   git switch archive/dess-monitor-local
+   git switch main
    git pull
    ```
 
@@ -111,7 +112,7 @@ délai de quelques heures est donc normal.
    ```bash
    git add custom_components CHANGELOG.md
    git commit -m "release: vX.Y.Z"
-   git push origin archive/dess-monitor-local
+   git push origin main
    ```
 
 5. Créer et pousser le tag :
@@ -136,7 +137,9 @@ antérieure compatible.
 
 ## Pièges à éviter
 
-- **Ne pas taguer sur `main`** : cette branche ne contient pas l'intégration.
+- **Tout est sur `main`** : ne pas recréer de branche séparée pour
+  l'intégration, sinon le Marketplace ne verra plus `hacs.json` à la racine de
+  la branche par défaut.
 - **Un tag sans release publiée** ne donne pas de version stable ; le
   Marketplace utilise alors le dernier commit de la branche par défaut.
 - **Ne pas modifier un tag existant** : les utilisateurs qui l'ont installé

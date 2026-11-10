@@ -1,0 +1,109 @@
+"""Platform for sensor integration."""
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from custom_components.dess_monitor_local.const import (
+    CONF_ENTRY_KIND,
+    CONF_PROTOCOL,
+    ENTRY_KIND_EYBOND_HUB,
+    PROTOCOL_MODBUS,
+    PROTOCOL_PI18,
+)
+from custom_components.dess_monitor_local.sensors.direct_sensor import (
+    DIRECT_SENSORS,
+    MODBUS_UNSUPPORTED_QPIRI_KEYS,
+    MODBUS_UNSUPPORTED_SENSORS,
+    PI18_SENSORS,
+    generate_qpiri_sensors,
+)
+
+from . import HubConfigEntry
+from .sensors.direct_energy_sensors import (
+    DirectBatteryBackupTimeSensor,
+    DirectBatteryInEnergySensor,
+    DirectBatteryOutEnergySensor,
+    DirectBatteryStateOfChargeSensor,
+    DirectBatteryTimeToFloorSensor,
+    DirectBatteryTimeToFullSensor,
+    DirectBatteryVSocLastSyncSensor,
+    DirectInverterOutputEnergySensor,
+    DirectPV2EnergySensor,
+    DirectPVEnergySensor,
+)
+
+
+async def async_setup_entry(
+        hass: HomeAssistant,
+        config_entry: HubConfigEntry,
+        async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add sensors for passed config_entry in HA."""
+    hub = config_entry.runtime_data
+    new_devices = []
+    entry_protocol = config_entry.options.get(CONF_PROTOCOL)
+
+    # Hub entries get a diagnostic device showing discovered dongles, so the
+    # integration is visibly "working" even before any child is configured.
+    if config_entry.options.get(CONF_ENTRY_KIND) == ENTRY_KIND_EYBOND_HUB:
+        from .sensors.eybond_hub_sensor import EybondHubDiscoverySensor
+
+        new_devices.append(EybondHubDiscoverySensor(hass, config_entry))
+
+    for item in hub.items:
+        # Per-item protocol (a hub may mix protocols across children); fall
+        # back to the entry-level option for legacy single-device entries.
+        item_protocol = getattr(item, "protocol", None) or entry_protocol
+        is_pi18 = item_protocol == PROTOCOL_PI18
+        is_modbus = item_protocol == PROTOCOL_MODBUS
+
+        # Construct the SoC sensor first — the time-to-* sensors hold a
+        # reference to it so they read SoC and capacity from the same
+        # in-memory state, avoiding any cross-entity state-lookup race
+        # and guaranteeing all derived numbers move in lockstep.
+        soc_sensor = DirectBatteryStateOfChargeSensor(item, hub.direct_coordinator, hass)
+
+        new_devices.extend(create_direct_sensors(item, hub.direct_coordinator, is_modbus))
+        new_devices.extend(generate_qpiri_sensors(
+            item,
+            hub.direct_coordinator,
+            skip_keys=MODBUS_UNSUPPORTED_QPIRI_KEYS if is_modbus else (),
+        ))
+        new_devices.extend([
+            DirectPVEnergySensor(item, hub.direct_coordinator),
+            DirectInverterOutputEnergySensor(item, hub.direct_coordinator),
+            DirectBatteryInEnergySensor(item, hub.direct_coordinator),
+            DirectBatteryOutEnergySensor(item, hub.direct_coordinator),
+            soc_sensor,
+            DirectBatteryTimeToFloorSensor(item, hub.direct_coordinator, soc_sensor, hass),
+            DirectBatteryTimeToFullSensor(item, hub.direct_coordinator, soc_sensor),
+            DirectBatteryBackupTimeSensor(item, hub.direct_coordinator, soc_sensor, hass),
+            DirectBatteryVSocLastSyncSensor(item, hub.direct_coordinator, soc_sensor),
+        ])
+        if not is_modbus:
+            # QPIGS2 is not implemented by SMG-II; the energy sensor would
+            # stay at zero forever.
+            new_devices.append(DirectPV2EnergySensor(item, hub.direct_coordinator))
+        if is_pi18:
+            # PI18 GS response exposes a second MPPT, two temperatures, and
+            # several direction flags that don't exist in Voltronic PI30.
+            # Only wire them up when the user is actually on PI18 — keeps the
+            # entity list clean for PI30 deployments.
+            new_devices.extend(
+                sensor_cls(item, hub.direct_coordinator) for sensor_cls in PI18_SENSORS
+            )
+
+    if new_devices:
+        async_add_entities(new_devices)
+
+
+def create_direct_sensors(item, coordinator, is_modbus=False):
+    """Return direct protocol-based sensors for an item."""
+    direct_sensor_classes = DIRECT_SENSORS
+    if is_modbus:
+        direct_sensor_classes = [
+            sensor_cls
+            for sensor_cls in DIRECT_SENSORS
+            if sensor_cls not in MODBUS_UNSUPPORTED_SENSORS
+        ]
+    return [sensor_cls(item, coordinator) for sensor_cls in direct_sensor_classes]

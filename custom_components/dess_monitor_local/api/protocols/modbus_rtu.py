@@ -1,0 +1,479 @@
+"""Modbus RTU-over-TCP transport (SMG-II inverter controller).
+
+URI: ``modbus://<host>:<port>``
+
+Implements raw Modbus RTU framing on top of an asyncio TCP socket — no
+``time.sleep`` and no ``pyserial``. Two helpers translate the SMG-II
+register block into the QPIGS / QPIRI shapes the rest of the
+integration consumes.
+"""
+from __future__ import annotations
+
+import asyncio
+
+from ..crc import crc16_modbus
+from ..decoders.enums import (
+    ACInputVoltageRange,
+    ChargerSourcePriority,
+    OutputSourcePriority,
+)
+
+UNIT_ID = 1
+
+
+def parse_modbus_uri(device: str) -> tuple[str, int]:
+    _, addr = device.split("modbus://", 1)
+    host, port_str = addr.split(":")
+    return host, int(port_str)
+
+
+def _i16(v: int) -> int:
+    """Convert an unsigned 16-bit register to signed."""
+    return v - 65536 if v >= 32768 else v
+
+
+# ---------------------------------------------------------------------------
+# Pure RTU framing — used by the TCP path below and by the EyBond transport
+# (which forwards these raw frames through the dongle's FC=4 channel).
+# ---------------------------------------------------------------------------
+def build_read_holding_frame(start: int, count: int, unit_id: int = UNIT_ID) -> bytes:
+    """Build a 'read holding registers' (func 0x03) RTU request frame."""
+    req = bytearray(
+        [unit_id & 0xFF, 3, (start >> 8) & 0xFF, start & 0xFF,
+         (count >> 8) & 0xFF, count & 0xFF]
+    )
+    crc = crc16_modbus(bytes(req))
+    req.append(crc & 0xFF)
+    req.append((crc >> 8) & 0xFF)
+    return bytes(req)
+
+
+def parse_read_holding_response(
+    resp: bytes, count: int, unit_id: int = UNIT_ID
+) -> list[int]:
+    """Parse a complete func-0x03 RTU response frame into register values."""
+    if len(resp) < 5:
+        raise ValueError("short modbus read response")
+    uid, func = resp[0], resp[1]
+    if uid != unit_id:
+        raise ValueError(f"unexpected unit id {uid}")
+    if func & 0x80:
+        raise ValueError(f"modbus exception {resp[2]}")
+    byte_count = resp[2]
+    end = 3 + byte_count
+    if len(resp) < end + 2:
+        raise ValueError("short modbus data")
+    data = resp[3:end]
+    recv_crc = resp[end] | (resp[end + 1] << 8)
+    if recv_crc != crc16_modbus(bytes(resp[:end])):
+        raise ValueError("modbus CRC mismatch")
+    regs: list[int] = []
+    for i in range(0, min(byte_count, count * 2), 2):
+        regs.append((data[i] << 8) | data[i + 1])
+    return regs
+
+
+def build_write_single_frame(
+    address: int, value: int, unit_id: int = UNIT_ID, func_code: int = 0x06
+) -> bytes:
+    """Build a single-register write (0x06) or 1-register multi-write (0x10)."""
+    req = bytearray(
+        [unit_id & 0xFF, func_code & 0xFF, (address >> 8) & 0xFF, address & 0xFF]
+    )
+    if func_code == 0x06:
+        req += bytes([(value >> 8) & 0xFF, value & 0xFF])
+    elif func_code == 0x10:
+        req += bytes([0x00, 0x01, 0x02, (value >> 8) & 0xFF, value & 0xFF])
+    else:
+        raise ValueError(f"unsupported func_code {func_code}")
+    crc = crc16_modbus(bytes(req))
+    req.append(crc & 0xFF)
+    req.append((crc >> 8) & 0xFF)
+    return bytes(req)
+
+
+def parse_write_response(resp: bytes, unit_id: int = UNIT_ID) -> dict:
+    """Validate a write echo/ack frame. Returns {"status": "OK"} or error."""
+    if len(resp) < 4:
+        return {"error": "short modbus write response"}
+    uid, func = resp[0], resp[1]
+    if func & 0x80:
+        return {"error": f"modbus exception {resp[2] if len(resp) > 2 else '?'}"}
+    if uid != unit_id:
+        return {"error": f"unexpected unit id {uid}"}
+    if len(resp) >= 8:
+        body = resp[:6]
+        recv_crc = resp[6] | (resp[7] << 8)
+        if recv_crc != crc16_modbus(bytes(body)):
+            return {"error": "modbus write CRC mismatch"}
+    return {"status": "OK", "func": func}
+
+
+async def read_modbus_block(
+    host: str,
+    port: int,
+    start: int,
+    count: int,
+    unit_id: int = UNIT_ID,
+    timeout: float = 30.0,
+) -> list[int]:
+    """Read a contiguous block of Modbus holding registers (func 0x03)."""
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(host, port), timeout=timeout
+    )
+
+    try:
+        req = bytearray()
+        req.append(unit_id & 0xFF)
+        req.append(3)
+        req.append((start >> 8) & 0xFF)
+        req.append(start & 0xFF)
+        req.append((count >> 8) & 0xFF)
+        req.append(count & 0xFF)
+        crc = crc16_modbus(bytes(req))
+        req.append(crc & 0xFF)
+        req.append((crc >> 8) & 0xFF)
+
+        writer.write(req)
+        await writer.drain()
+
+        header2 = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+        if len(header2) < 2:
+            raise Exception("Short Modbus header")
+
+        uid, func = header2[0], header2[1]
+        if uid != unit_id:
+            raise Exception(f"Unexpected unit id: {uid}")
+
+        if func & 0x80:
+            exc_and_crc = await asyncio.wait_for(reader.readexactly(3), timeout=timeout)
+            raise Exception(f"Modbus exception {exc_and_crc[0]}")
+
+        bc_bytes = await asyncio.wait_for(reader.readexactly(1), timeout=timeout)
+        byte_count = bc_bytes[0]
+
+        data_plus_crc = await asyncio.wait_for(
+            reader.readexactly(byte_count + 2), timeout=timeout
+        )
+        if len(data_plus_crc) < byte_count + 2:
+            raise Exception("Short Modbus data")
+
+        data = data_plus_crc[:-2]
+        crc_lo, crc_hi = data_plus_crc[-2], data_plus_crc[-1]
+        recv_crc = crc_lo | (crc_hi << 8)
+        calc_crc = crc16_modbus(header2 + bc_bytes + data)
+        if recv_crc != calc_crc:
+            raise Exception("Modbus CRC mismatch")
+
+        if byte_count % 2 != 0:
+            raise Exception("Modbus byte_count not even")
+
+        regs: list[int] = []
+        for i in range(0, min(byte_count, count * 2), 2):
+            regs.append((data[i] << 8) | data[i + 1])
+        return regs
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+
+async def write_modbus_single_register(
+    host: str,
+    port: int,
+    address: int,
+    value: int,
+    unit_id: int = UNIT_ID,
+    timeout: float = 30.0,
+) -> dict:
+    """Write a single holding register; falls back to multi-write if the
+    inverter rejects the single-write opcode (some Elfin/SMG combos do).
+    Returns ``{"status": "OK", ...}`` or ``{"error": "..."}``.
+    """
+
+    async def _send(func_code: int) -> dict:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=timeout
+        )
+        try:
+            req = bytearray()
+            req.append(unit_id & 0xFF)
+            req.append(func_code & 0xFF)
+            req.append((address >> 8) & 0xFF)
+            req.append(address & 0xFF)
+            if func_code == 0x06:
+                req.append((value >> 8) & 0xFF)
+                req.append(value & 0xFF)
+            elif func_code == 0x10:
+                req.append(0x00)
+                req.append(0x01)
+                req.append(0x02)
+                req.append((value >> 8) & 0xFF)
+                req.append(value & 0xFF)
+            else:
+                raise ValueError(f"Unsupported func_code {func_code}")
+
+            crc = crc16_modbus(bytes(req))
+            req.append(crc & 0xFF)
+            req.append((crc >> 8) & 0xFF)
+
+            writer.write(req)
+            await writer.drain()
+
+            resp = await asyncio.wait_for(reader.readexactly(8), timeout=timeout)
+            if len(resp) != 8:
+                raise Exception(f"Short Modbus write response: {len(resp)} bytes")
+
+            body = resp[:-2]
+            crc_lo, crc_hi = resp[-2], resp[-1]
+            recv_crc = crc_lo | (crc_hi << 8)
+            calc_crc = crc16_modbus(body)
+            if recv_crc != calc_crc:
+                raise Exception("Modbus write CRC mismatch")
+
+            uid, fback = body[0], body[1]
+            if uid != unit_id:
+                raise Exception(f"Unexpected unit id in write response: {uid}")
+            if fback & 0x80:
+                raise Exception(f"Modbus exception in write: {body[2]}")
+
+            return {"status": "OK", "func": func_code}
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    try:
+        return await _send(0x06)
+    except Exception as e1:
+        try:
+            return await _send(0x10)
+        except Exception as e2:
+            return {
+                "error": f"modbus write failed (0x06: {e1}, 0x10: {e2})"
+            }
+
+
+_OPERATION_MODES = {
+    0: "Power On",
+    1: "Standby",
+    2: "Mains",
+    3: "Off-Grid",
+    4: "Bypass",
+    5: "Charging",
+    6: "Fault",
+}
+
+
+async def read_smg2_snapshot(host: str, port: int) -> tuple[dict, dict, dict]:
+    """Read SMG-II's three register blocks over Modbus RTU-over-TCP.
+
+    Thin wrapper over :func:`read_smg2_snapshot_via` with a TCP read_block.
+    """
+    async def read_block(start: int, count: int) -> list[int]:
+        return await read_modbus_block(host, port, start, count)
+
+    return await read_smg2_snapshot_via(read_block)
+
+
+async def read_smg2_snapshot_via(read_block) -> tuple[dict, dict, dict]:
+    """Read SMG-II's three register blocks via an arbitrary transport.
+
+    ``read_block(start, count) -> list[int]`` abstracts the transport so the
+    same register map works over TCP or through an EyBond dongle (FC=4).
+
+    Returns (sensors, config, faults). Faults is a dict containing
+    ``fault_code`` / ``warning_code`` (32-bit DWORD each) plus derived
+    convenience booleans. Per the published SMG-II protocol the
+    per-bit decomposition isn't public — we surface the raw code and
+    a ``has_fault`` / ``has_warning`` flag, which is enough to drive
+    the integration's any_warning binary_sensor and fault summary.
+    """
+    # Block 100-115 covers fault_code (100, 2 words) and warning_code
+    # (108, 2 words) per the SMG-II Modbus map. Reading the whole 16-word
+    # span in one shot is cheaper than two separate transactions and
+    # captures any future fields in between.
+    try:
+        block_100 = await read_block(100, 16)
+    except Exception:
+        block_100 = None
+
+    faults: dict = {}
+    if block_100 is not None and len(block_100) >= 10:
+        fault_code = (block_100[0] << 16) | block_100[1]   # regs 100-101
+        warning_code = (block_100[8] << 16) | block_100[9]  # regs 108-109
+        faults = {
+            "fault_code": fault_code,
+            "warning_code": warning_code,
+            "has_fault": fault_code != 0,
+            "has_warning": warning_code != 0,
+            "fault_description": (
+                f"SMG-II fault 0x{fault_code:08X}" if fault_code else None
+            ),
+        }
+
+    block_200 = await read_block(201, 31)
+
+    def R200(addr: int) -> int:
+        return block_200[addr - 201]
+
+    sensors = {
+        "operation_mode": _OPERATION_MODES.get(R200(201)),
+        "mains_voltage": R200(202) / 10.0,
+        "mains_frequency": R200(203) / 100.0,
+        "mains_power": _i16(R200(204)),
+        "inverter_voltage": R200(205) / 10.0,
+        "inverter_current": _i16(R200(206)) / 10.0,
+        "inverter_frequency": R200(207) / 100.0,
+        "inverter_power": _i16(R200(208)),
+        "inverter_charge_power": _i16(R200(209)),
+        "output_voltage": R200(210) / 10.0,
+        "output_current": _i16(R200(211)) / 10.0,
+        "output_frequency": R200(212) / 100.0,
+        "output_active_power": _i16(R200(213)),
+        "output_apparent_power": _i16(R200(214)),
+        "battery_voltage": R200(215) / 10.0,
+        "battery_current": _i16(R200(216)) / 10.0,
+        "battery_power": _i16(R200(217)),
+        "battery_soc": R200(229),
+        "pv_voltage": R200(219) / 10.0,
+        "pv_current": R200(220) / 10.0,
+        "pv_power": _i16(R200(223)),
+        "pv_charge_power": _i16(R200(224)),
+        "load_percent": R200(225),
+        "temp_dcdc": R200(226),
+        "temp_inverter": R200(227),
+    }
+
+    block_300 = await read_block(300, 38)
+
+    def R300(addr: int) -> int:
+        return block_300[addr - 300]
+
+    config = {
+        "output_mode": R300(300),
+        "output_priority": R300(301),
+        "input_voltage_range": R300(302),
+        "buzzer_mode": R300(303),
+        "lcd_backlight": R300(305),
+        "lcd_auto_return": R300(306),
+        "energy_saving_mode": R300(307),
+        "overload_auto_restart": R300(308),
+        "overtemp_auto_restart": R300(309),
+        "overload_transfer_to_bypass": R300(310),
+        "battery_eq_enabled": R300(313),
+        "output_voltage_setting": R300(320) / 10.0,
+        "output_freq_setting": R300(321) / 100.0,
+        "battery_ovp": R300(323) / 10.0,
+        "max_charge_voltage": R300(324) / 10.0,
+        "float_charge_voltage": R300(325) / 10.0,
+        "battery_discharge_recovery_mains": R300(326) / 10.0,
+        "battery_low_protection_mains": R300(327) / 10.0,
+        "battery_low_protection_offgrid": R300(329) / 10.0,
+        "battery_charging_priority": R300(331),
+        "max_charging_current": R300(332) / 10.0,
+        "max_mains_charging_current": R300(333) / 10.0,
+        "eq_charging_voltage": R300(334) / 10.0,
+        "eq_time_minutes": R300(335),
+        "eq_timeout": R300(336),
+        "eq_interval_days": R300(337),
+    }
+
+    return sensors, config, faults
+
+
+def smg2_to_qpigs(s: dict) -> dict:
+    """Project SMG-II sensor block onto the QPIGS-shaped dict.
+
+    Only values that actually come from the inverter are projected. The
+    QPIGS-only fields SMG-II does not report (bus voltage, status bits,
+    SCC voltage, EEPROM version) are deliberately omitted: screen them out
+    of the entity list instead of inventing values that look plausible.
+    """
+    battery_charging_current = max(0, int(s["battery_current"]))
+    battery_discharge_current = max(0, int(-s["battery_current"]))
+    battery_soc = min(100, max(0, int(s["battery_soc"])))
+
+    return {
+        "grid_voltage": f"{s['mains_voltage']:.1f}",
+        "grid_frequency": f"{s['mains_frequency']:.1f}",
+        "ac_output_voltage": f"{s['output_voltage']:.1f}",
+        "ac_output_frequency": f"{s['output_frequency']:.2f}",
+        "output_apparent_power": f"{abs(s['output_apparent_power']):04d}",
+        "output_active_power": f"{abs(s['output_active_power']):04d}",
+        "load_percent": f"{s['load_percent']:03d}",
+        "battery_voltage": f"{s['battery_voltage']:.2f}",
+        "battery_charging_current": f"{battery_charging_current:03d}",
+        "battery_capacity": f"{battery_soc:03d}",
+        "inverter_heat_sink_temperature": f"{s['temp_inverter']:.1f}",
+        "inverter_dcdc_module_temperature": f"{s['temp_dcdc']:.1f}",
+        "pv_input_current": f"{s['pv_current']:.1f}",
+        "pv_input_voltage": f"{s['pv_voltage']:.1f}",
+        "battery_discharge_current": f"{battery_discharge_current:05d}",
+        "battery_power": f"{s['battery_power']}",
+        "pv_charging_power": f"{int(s['pv_power']):05d}",
+        "grid_ac_in_power": f"{abs(s['mains_power']):05d}",
+    }
+
+
+_OUTPUT_PRIORITY_MAP = {
+    0: OutputSourcePriority.UtilityFirst.name,
+    1: OutputSourcePriority.SolarFirst.name,
+    2: OutputSourcePriority.SBU.name,
+    3: OutputSourcePriority.SUB.name,
+}
+
+_CHARGER_PRIORITY_MAP = {
+    0: ChargerSourcePriority.UtilityFirst.name,
+    1: ChargerSourcePriority.SolarFirst.name,
+    2: ChargerSourcePriority.SolarAndUtility.name,
+    3: ChargerSourcePriority.OnlySolar.name,
+}
+
+
+def smg2_to_qpiri(c: dict) -> dict:
+    """Project SMG-II config block onto the QPIRI-shaped dict."""
+    ac_range_name = (
+        ACInputVoltageRange.UPS.name
+        if c["input_voltage_range"] == 1
+        else ACInputVoltageRange.Appliance.name
+    )
+
+    return {
+        "rated_grid_voltage": "230.0",
+        "rated_input_current": "15.2",
+        "rated_ac_output_voltage": "230.0",
+        "rated_output_frequency": "50.0",
+        "rated_output_current": "15.2",
+        "rated_output_apparent_power": "4000",
+        "rated_output_active_power": "4000",
+        "rated_battery_voltage": "24.0",
+        "low_battery_to_ac_bypass_voltage": f"{c['battery_low_protection_mains']:.1f}",
+        "shut_down_battery_voltage": f"{c['battery_low_protection_offgrid']:.1f}",
+        "bulk_charging_voltage": f"{c['max_charge_voltage']:.1f}",
+        "float_charging_voltage": f"{c['float_charge_voltage']:.1f}",
+        "battery_type": "UserDefined",
+        "max_utility_charging_current": f"{int(c['max_mains_charging_current']):02d}",
+        "max_charging_current": f"{int(c['max_charging_current']):03d}",
+        "ac_input_voltage_range": ac_range_name,
+        "output_source_priority": _OUTPUT_PRIORITY_MAP.get(
+            c["output_priority"], OutputSourcePriority.UtilityFirst.name
+        ),
+        "charger_source_priority": _CHARGER_PRIORITY_MAP.get(
+            c["battery_charging_priority"], ChargerSourcePriority.UtilityFirst.name
+        ),
+        "parallel_max_number": "6",
+        "reserved_uu": "01",
+        "reserved_v": "0",
+        "parallel_mode": "Single",
+        "high_battery_voltage_to_battery_mode": f"{c['battery_discharge_recovery_mains']:.1f}",
+        "solar_work_condition_in_parallel": "0",
+        "solar_max_charging_power_auto_adjust": "1_",
+        "rated_battery_capacity": "200",
+        "reserved_b": "0",
+        "reserved_ccc": "0",
+    }

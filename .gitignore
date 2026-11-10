@@ -12,3 +12,10 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+.coverage
+.pytest_cache/
+.ruff_cache/
+
+# IDE (intégration)
+.idea/

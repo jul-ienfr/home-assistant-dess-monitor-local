@@ -214,9 +214,9 @@ Deux dépôts sont utilisables :
 | **Fork Anenji** (recommandé) | `1.1.0-beta.3-anenji.3` | beta.3 + SUB + PN complet + SOC réel + démarrage non bloquant |
 | Upstream | `v1.1.0-beta.3` | beta.3 non corrigée |
 
-Le fork est la branche **par défaut** du dépôt :
+Le fork est intégré à la branche `main` du dépôt :
 <https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
-(branche `archive/dess-monitor-local`, tag `v1.1.0-beta.3-anenji.3`).
+(release `v1.1.0-beta.3-anenji.3`).
 
 Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
 § 7.4, les valeurs réelles de SOC et de puissance apparente, la gestion des
@@ -226,7 +226,7 @@ l'upstream.
 Depuis Home Assistant 2026.11, HACS est intégré sous le nom **Marketplace**
 (`Paramètres → Marketplace`). L'application « Get HACS » n'est plus nécessaire
 et doit être retirée. Le Marketplace lit `hacs.json` et
-`custom_components/dess_monitor_local/` sur la branche par défaut.
+`custom_components/dess_monitor_local/` sur la branche `main`.
 
 Via Marketplace :
 
@@ -242,16 +242,14 @@ Via Marketplace :
 
 Le Marketplace installe la dernière **release GitHub publiée**, pas un simple
 tag. La version de `manifest.json` doit correspondre au tag (sans le préfixe
-`v`). Toute nouvelle
-version doit donc être publiée sur la branche `archive/dess-monitor-local` ;
-voir [`MARKETPLACE.md`](MARKETPLACE.md).
+`v`). Toute nouvelle version doit donc être publiée sur `main` ; voir
+[`MARKETPLACE.md`](MARKETPLACE.md).
 
 Pour rester sur l'upstream, ajouter à la place
 `https://github.com/Antoxa1081/home-assistant-dess-monitor-local`, activer les
 préversions et installer `v1.1.0-beta.3`, puis appliquer le patch du § 7.4.1.
 
-Installation manuelle : télécharger l'archive de la branche
-`archive/dess-monitor-local`, puis copier le dossier
+Installation manuelle : télécharger l'archive du dépôt, puis copier le dossier
 `custom_components/dess_monitor_local` dans `/config/custom_components/`, et
 redémarrer Home Assistant.
 
@@ -412,19 +410,15 @@ SUB et le PN complet.
 
 ### 7.4.1 Faut-il créer un fork ?
 
-Non, il est déjà archivé :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local>
+Non, il est déjà intégré :
+<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
 
-La branche `archive/dess-monitor-local` contient la beta.3 upstream, le
-correctif SUB et le PN complet, ainsi que les correctifs de la version
+La branche `main` contient la beta.3 upstream, le correctif SUB et le PN
+complet, ainsi que les correctifs de la version
 `1.1.0-beta.3-anenji.3`. Le tag `v1.1.0-beta.3-anenji.3` marque exactement
-cette version. Cette branche est la branche par défaut du dépôt et contient
-`hacs.json` et `custom_components/`, donc le Marketplace peut l'installer
-directement. Aucun fork supplémentaire n'est nécessaire.
-
-La branche `main` du dépôt contient le projet ESPHome Anenji ; elle n'est plus
-la branche par défaut. Une nouvelle release de l'intégration doit être taguée
-sur `archive/dess-monitor-local`, pas sur `main`.
+cette version. La branche contient `hacs.json` et `custom_components/`, donc
+le Marketplace peut l'installer directement. Aucun fork supplémentaire n'est
+nécessaire. Une nouvelle release de l'intégration doit être taguée sur `main`.
 
 Pour ceux qui préfèrent rester sur le dépôt upstream, le patch reste
 applicable. Copier d'abord `patches/dess-monitor-local-beta3-anenji.patch`
@@ -505,9 +499,9 @@ logger:
 
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant d'origine.
-- [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
-  — beta.3 + SUB + PN complet + SOC réel, branche par défaut
-  `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
+- [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
+  — beta.3 + SUB + PN complet + SOC réel, intégré sur `main`
+  (release `v1.1.0-beta.3-anenji.3`).
 - [Documentation EyBond du projet](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/wiki/EyBond-Transport-Setup.md)
   — transport inverse, Docker et dépannage.
 - [`PROTOCOL.md`](PROTOCOL.md) — carte des registres SMG-II.

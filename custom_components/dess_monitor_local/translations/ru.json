@@ -1,0 +1,226 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Устройство уже настроено"
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться",
+      "unknown": "Непредвиденная ошибка",
+      "name_required": "Введите имя",
+      "host_required": "Для этого транспорта нужен Host/IP",
+      "serial_required": "Выберите или введите serial-порт",
+      "agent_device_id_required": "Для локального агента нужен providerDeviceId"
+    },
+    "step": {
+      "user": {
+        "title": "Добавление DESS Monitor Local",
+        "description": "Добавьте один инвертор или EyBond-хаб, который сам обнаружит несколько Wi-Fi донглов на одном порту.",
+        "menu_options": {
+          "device": "Один инвертор",
+          "hub": "EyBond-хаб (автообнаружение нескольких донглов)"
+        }
+      },
+      "device": {
+        "title": "Добавление инвертора",
+        "description": "Задайте имя инвертора. На следующих шагах выберите протокол, транспорт и адрес.",
+        "data": {
+          "name": "Имя"
+        }
+      },
+      "hub": {
+        "title": "Добавление EyBond-хаба",
+        "description": "Один TCP-листенер принимает несколько EyBond донглов, обнаруживая их по серийному номеру (PN). После настройки откройте опции хаба, чтобы назначить протокол каждому донглу.",
+        "data": {
+          "name": "Имя",
+          "host": "Интерфейс прослушивания",
+          "port": "Порт прослушивания",
+          "eybond_broadcast": "Broadcast адрес",
+          "eybond_announce_ip": "Announce IP",
+          "update_interval": "Интервал обновления (секунды)"
+        },
+        "data_description": {
+          "host": "Локальный интерфейс для TCP-листенера (обычно 0.0.0.0).",
+          "port": "TCP-порт, к которому подключаются донглы (по умолчанию 8899).",
+          "eybond_broadcast": "UDP broadcast-адрес для объявления локального сервера донглам.",
+          "eybond_announce_ip": "IP, передаваемый донглам. Пусто — автоопределение; в Docker bridge укажите LAN IP хоста.",
+          "update_interval": "Как часто опрашивать каждый включённый дочерний инвертор."
+        }
+      },
+      "protocol": {
+        "title": "Выбор протокола",
+        "description": "Выберите командный протокол инвертора или локального источника данных.",
+        "data": {
+          "protocol": "Протокол"
+        }
+      },
+      "transport": {
+        "title": "Выбор транспорта",
+        "description": "Протокол: {protocol}. Выберите, как Home Assistant будет подключаться.",
+        "data": {
+          "transport": "Транспорт"
+        }
+      },
+      "connection": {
+        "title": "Параметры подключения",
+        "description": "Протокол: {protocol}. Транспорт: {transport}. Укажите адрес подключения и интервал опроса.",
+        "data": {
+          "host": "Host / IP адрес",
+          "port": "Порт",
+          "serial_device": "Serial-порт",
+          "agent_device_id": "Provider device ID",
+          "eybond_devaddr": "RS485 адрес устройства",
+          "eybond_broadcast": "Broadcast адрес",
+          "eybond_announce_ip": "Announce IP",
+          "update_interval": "Интервал обновления (секунды)",
+          "strict_crc": "Строгая проверка CRC"
+        },
+        "data_description": {
+          "host": "IP или hostname инвертора, шлюза, агента или локальный bind-интерфейс для EyBond.",
+          "port": "TCP-порт. По умолчанию: 8899 для direct TCP/Modbus/EyBond, 8787 для локального агента.",
+          "serial_device": "Путь к USB/RS232 устройству. Можно ввести вручную.",
+          "agent_device_id": "providerDeviceId устройства в solar-system-agent.",
+          "eybond_devaddr": "RS485 slave-адрес за EyBond dongle.",
+          "eybond_broadcast": "UDP broadcast-адрес для объявления локального сервера dongle.",
+          "eybond_announce_ip": "IP, который будет передан dongle. Оставьте пустым для автоопределения.",
+          "update_interval": "Как часто опрашивать устройство. Меньшее значение - чаще обновления.",
+          "strict_crc": "Отбрасывать Voltronic/PI18 кадры с неверным CRC вместо попытки декодирования."
+        }
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "no_devices": "EyBond донглы ещё не обнаружены. Включите донгл в той же сети, дождитесь подключения и повторите.",
+      "dongle_offline": "Донгл сейчас не подключён, поэтому его серийный номер (PN) нельзя считать для миграции. Дождитесь подключения и повторите.",
+      "not_eybond": "Эта запись не является EyBond-устройством, её нельзя преобразовать в хаб.",
+      "rescan_started": "Сканирование новых донглов около минуты. Новые донглы появятся в «Управление обнаруженными устройствами»."
+    },
+    "error": {
+      "host_required": "Для этого транспорта нужен Host/IP",
+      "serial_required": "Выберите или введите serial-порт",
+      "agent_device_id_required": "Для локального агента нужен providerDeviceId"
+    },
+    "step": {
+      "init": {
+        "title": "Параметры EyBond",
+        "menu_options": {
+          "devices": "Управление обнаруженными устройствами",
+          "rescan": "Сканировать новые донглы",
+          "listener": "Настройки листенера",
+          "edit": "Изменить подключение",
+          "migrate_hub": "Преобразовать в EyBond-хаб",
+          "debug_panel": "Дебаг-панель"
+        }
+      },
+      "rescan": {
+        "title": "Сканировать новые донглы",
+        "description": "Рассылает discovery-маяк около минуты, чтобы новые EyBond донглы в сети подключились и обнаружились. Уже подключённые донглы могут на время переподключиться во время сканирования (маяк нельзя направить на один донгл). Нажмите, чтобы запустить."
+      },
+      "migrate_hub": {
+        "title": "Преобразовать в EyBond-хаб",
+        "description": "Преобразует одиночную запись в EyBond-хаб: один листенер, который сам обнаруживает донглы по серийному номеру (PN) и позволяет добавлять новые. Текущий подключённый донгл станет настроенным дочерним устройством с его протоколом и адресом. История сущностей сохраняется. Донгл должен быть онлайн сейчас, чтобы считать его PN. Нажмите, чтобы преобразовать и перезагрузить."
+      },
+      "devices": {
+        "title": "Обнаруженные устройства",
+        "description": "Выберите донгл (по серийному номеру / PN) для настройки.",
+        "data": {
+          "pn": "Донгл"
+        }
+      },
+      "device_edit": {
+        "title": "Настройка донгла {pn}",
+        "description": "Статус: {status}. Последний раз: {last_seen}. Включите устройство и назначьте протокол, чтобы начать опрос.",
+        "data": {
+          "enabled": "Включено",
+          "name": "Имя",
+          "protocol": "Протокол",
+          "eybond_devaddr": "RS485 адрес устройства",
+          "remove": "Удалить это устройство"
+        },
+        "data_description": {
+          "protocol": "Выберите 'none', чтобы донгл оставался обнаруженным, но не опрашивался.",
+          "eybond_devaddr": "RS485 slave-адрес инвертора за этим донглом (1, если не в цепочке).",
+          "remove": "Удалить донгл из обнаружения. Если он ещё онлайн — будет обнаружен заново при следующем heartbeat. Остальные поля игнорируются, если отмечено."
+        }
+      },
+      "listener": {
+        "title": "Настройки листенера",
+        "description": "Измените TCP-листенер и интервал опроса. Сохранение перезагрузит хаб.",
+        "data": {
+          "host": "Интерфейс прослушивания",
+          "port": "Порт прослушивания",
+          "eybond_broadcast": "Broadcast адрес",
+          "eybond_announce_ip": "Announce IP",
+          "update_interval": "Интервал обновления (секунды)"
+        }
+      },
+      "protocol": {
+        "title": "Протокол подключения",
+        "description": "Выберите командный протокол инвертора или локального источника данных.",
+        "data": {
+          "protocol": "Протокол"
+        }
+      },
+      "transport": {
+        "title": "Транспорт подключения",
+        "description": "Протокол: {protocol}. Выберите, как хаб будет подключаться.",
+        "data": {
+          "transport": "Транспорт"
+        }
+      },
+      "connection": {
+        "title": "Параметры подключения",
+        "description": "Протокол: {protocol}. Транспорт: {transport}. Измените адрес подключения и интервал опроса.",
+        "data": {
+          "host": "Host / IP адрес",
+          "port": "Порт",
+          "serial_device": "Serial-порт",
+          "agent_device_id": "Provider device ID",
+          "eybond_devaddr": "RS485 адрес устройства",
+          "eybond_broadcast": "Broadcast адрес",
+          "eybond_announce_ip": "Announce IP",
+          "update_interval": "Интервал обновления (секунды)",
+          "strict_crc": "Строгая проверка CRC",
+          "debug_panel": "Показывать дебаг-панель в боковом меню"
+        },
+        "data_description": {
+          "host": "IP или hostname инвертора, шлюза, агента или локальный bind-интерфейс для EyBond.",
+          "port": "TCP-порт. По умолчанию: 8899 для direct TCP/Modbus/EyBond, 8787 для локального агента.",
+          "serial_device": "Путь к USB/RS232 устройству. Можно ввести вручную.",
+          "agent_device_id": "providerDeviceId устройства в solar-system-agent.",
+          "eybond_devaddr": "RS485 slave-адрес за EyBond dongle.",
+          "eybond_broadcast": "UDP broadcast-адрес для объявления локального сервера dongle.",
+          "eybond_announce_ip": "IP, который будет передан dongle. Оставьте пустым для автоопределения.",
+          "update_interval": "Как часто опрашивать устройство. Меньшее значение - чаще обновления.",
+          "strict_crc": "Отбрасывать Voltronic/PI18 кадры с неверным CRC вместо попытки декодирования."
+        }
+      },
+      "debug_panel": {
+        "title": "Дебаг-панель",
+        "description": "Показывать админ-панель отладки в боковом меню. Применяется после перезагрузки интеграции.",
+        "data": {
+          "debug_panel": "Показывать дебаг-панель в боковом меню"
+        }
+      }
+    }
+  },
+  "selector": {
+    "protocol": {
+      "options": {
+        "voltronic": "Voltronic / Axpert PI30",
+        "pi18": "PI18 / InfiniSolar-V",
+        "modbus": "Modbus RTU (SMG-II)",
+        "agent": "Локальный solar-system-agent"
+      }
+    },
+    "transport": {
+      "options": {
+        "tcp_elfin": "Elfin / прозрачный TCP-шлюз",
+        "tcp": "TCP",
+        "serial": "Serial / USB (прямое RS232)",
+        "eybond": "EyBond / SmartESS Wi-Fi dongle",
+        "agent_http": "HTTP"
+      }
+    }
+  }
+}

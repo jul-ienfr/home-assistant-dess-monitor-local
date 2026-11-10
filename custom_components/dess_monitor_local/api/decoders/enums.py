@@ -1,0 +1,187 @@
+"""Enumerations shared across inverter protocols.
+
+Readback enums (BatteryType, OutputSourcePriority, etc.) mirror the values
+returned by Voltronic/PI18 firmware. PI18 uses a slightly different code
+space for some fields — adapters translate codes to ``.name`` strings so
+sensors stay protocol-agnostic.
+
+Setting enums (BatteryTypeSetting, ...) carry the wire commands used on
+the *write* path (e.g. POP00/POP01/POP02) and are intentionally separate
+from the readback enums so the two value spaces can never cross.
+"""
+from __future__ import annotations
+
+from enum import Enum, IntEnum, unique
+
+
+class BatteryType(Enum):
+    AGM = "0"
+    Flooded = "1"
+    UserDefined = "2"
+    LIB = "3"
+    LIC = "4"
+    RESERVED = "5"
+    RESERVED_1 = "6"
+    RESERVED_2 = "7"
+
+
+class ACInputVoltageRange(Enum):
+    Appliance = "0"
+    UPS = "1"
+
+
+class OutputSourcePriority(Enum):
+    UtilityFirst = "0"
+    SolarFirst = "1"
+    SBU = "2"
+    SUB = "3"
+    BatteryOnly = "4"
+    UtilityOnly = "5"
+    SolarAndUtility = "6"
+    Smart = "7"
+
+
+class ChargerSourcePriority(Enum):
+    UtilityFirst = "0"
+    SolarFirst = "1"
+    SolarAndUtility = "2"
+    OnlySolar = "3"
+
+
+class ParallelMode(Enum):
+    """PI30 QPIRI output mode (field 21): how this unit sits in a parallel set.
+
+    Codes 5-7 (split-phase) only appear on newer PI30 revisions. Firmware may
+    send the code zero-padded ("00"); see ``parallel_mode_name``.
+    """
+
+    Single = "0"
+    Parallel = "1"
+    Phase1Of3 = "2"
+    Phase2Of3 = "3"
+    Phase3Of3 = "4"
+    Phase1Of2 = "5"
+    Phase2Of2At120 = "6"
+    Phase2Of2At180 = "7"
+
+
+def parallel_mode_name(value: str) -> str:
+    """Map a raw output-mode code ("0", "04", ...) to its ``ParallelMode`` name.
+
+    Already-decoded names pass through; unknown values are returned verbatim
+    (the enum sensor then reports them as unknown instead of crashing).
+    """
+    if value in ParallelMode.__members__:
+        return value
+    try:
+        return ParallelMode(str(int(value))).name
+    except ValueError:
+        return value
+
+
+class OperatingMode(Enum):
+    PowerOn = "P"
+    Standby = "S"
+    Line = "L"
+    Battery = "B"
+    ShutdownApproaching = "D"
+    Fault = "F"
+
+
+# PI18 GS fields V (mppt1) and W (mppt2): charger controller state.
+class PI18MPPTStatus(Enum):
+    Abnormal = "0"
+    NotCharging = "1"
+    Charging = "2"
+
+
+# PI18 GS field Y: direction of energy flow on the battery bus.
+class PI18BatteryPowerDirection(Enum):
+    Idle = "0"
+    Charging = "1"
+    Discharging = "2"
+
+
+# PI18 GS field Z: direction of DC↔AC conversion inside the inverter.
+class PI18DCACPowerDirection(Enum):
+    Idle = "0"
+    ACtoDC = "1"
+    DCtoAC = "2"
+
+
+# PI18 GS field a: direction of energy flow on the grid line.
+class PI18LinePowerDirection(Enum):
+    Idle = "0"
+    Input = "1"
+    Output = "2"
+
+
+class BatteryTypeSetting(Enum):
+    AGM = "PBT00"
+    FLOODED = "PBT01"
+    USER = "PBT02"
+    LIFEP04 = "PBT03"
+
+
+class OutputSourcePrioritySetting(Enum):
+    UTILITY_FIRST = "POP00"
+    SOLAR_FIRST = "POP01"
+    SBU_PRIORITY = "POP02"
+    SUB_PRIORITY = "POP03"
+
+
+class ChargeSourcePrioritySetting(Enum):
+    UTILITY_FIRST = "PCP00"
+    SOLAR_FIRST = "PCP01"
+    SOLAR_AND_UTILITY = "PCP02"
+
+
+@unique
+class DeviceStatusBitsB7B0(IntEnum):
+    FAULT = 1 << 7
+    RESERVED_B6 = 1 << 6
+    BUS_OVER = 1 << 5
+    LINE_FAIL = 1 << 4
+    BATTERY_LOW = 1 << 3
+    BATTERY_HIGH = 1 << 2
+    INVERTER_OVERLOAD = 1 << 1
+    INVERTER_ON = 1 << 0
+
+
+@unique
+class DeviceStatusBitsB10B8(IntEnum):
+    CHARGING_TO_BATTERY = 1 << 2
+    CHARGING_AC_ACTIVE = 1 << 1
+    CHARGING_SCC_ACTIVE = 1 << 0
+
+
+def _extract_bits(raw: str, count: int) -> str:
+    """Strip everything that's not 0/1 and return exactly ``count`` bits."""
+    bits = [c for c in (raw or "") if c in "01"][:count]
+    return "".join(bits).rjust(count, "0")
+
+
+def parse_device_status_bits_b7_b0(raw: str) -> dict:
+    bits = _extract_bits(raw, 8)
+    value = int(bits, 2)
+    return {
+        "fault": bool(value & DeviceStatusBitsB7B0.FAULT),
+        "line_fail": bool(value & DeviceStatusBitsB7B0.LINE_FAIL),
+        "bus_over": bool(value & DeviceStatusBitsB7B0.BUS_OVER),
+        "battery_low": bool(value & DeviceStatusBitsB7B0.BATTERY_LOW),
+        "battery_high": bool(value & DeviceStatusBitsB7B0.BATTERY_HIGH),
+        "inverter_overload": bool(value & DeviceStatusBitsB7B0.INVERTER_OVERLOAD),
+        "inverter_on": bool(value & DeviceStatusBitsB7B0.INVERTER_ON),
+        "_raw_b7_b0": bits,
+    }
+
+
+def parse_device_status_bits_b10_b8(raw: str) -> dict:
+    bits = _extract_bits(raw, 3)
+    value = int(bits, 2)
+    return {
+        "charging_to_battery": bool(value & DeviceStatusBitsB10B8.CHARGING_TO_BATTERY),
+        "charging_scc_active": bool(value & DeviceStatusBitsB10B8.CHARGING_SCC_ACTIVE),
+        "charging_ac_active": bool(value & DeviceStatusBitsB10B8.CHARGING_AC_ACTIVE),
+        "_raw_b10_b8": bits,
+    }

@@ -1,0 +1,122 @@
+"""Backwards-compatibility shim.
+
+The implementation moved to :mod:`..dispatcher`, :mod:`..decoders.*`,
+:mod:`..protocols.*` and :mod:`..crc`. Existing imports from this module
+continue to work via the re-exports below — new code should import from
+the dedicated modules instead.
+"""
+from __future__ import annotations
+
+from ..crc import crc16_modbus as modbus_crc16
+from ..crc import crc16_voltronic as crc16
+from ..decoders.enums import (
+    ACInputVoltageRange,
+    BatteryType,
+    BatteryTypeSetting,
+    ChargerSourcePriority,
+    ChargeSourcePrioritySetting,
+    DeviceStatusBitsB7B0,
+    DeviceStatusBitsB10B8,
+    OperatingMode,
+    OutputSourcePriority,
+    OutputSourcePrioritySetting,
+    ParallelMode,
+    parse_device_status_bits_b7_b0,
+    parse_device_status_bits_b10_b8,
+)
+from ..decoders.voltronic import (
+    decode_ascii_response,
+    decode_direct_response,
+    decode_qbeqi,
+    decode_qflag,
+    decode_qid,
+    decode_qmn,
+    decode_qmod,
+    decode_qpigs,
+    decode_qpigs2,
+    decode_qpiri,
+    decode_qvfw,
+    direct_commands,
+    get_command_hex,
+    get_command_name_by_hex,
+    is_hex_string,
+    transform_qpiri_value,
+)
+from ..dispatcher import (
+    get_direct_data,
+    set_battery_bulk_voltage,
+    set_battery_charge_current,
+    set_battery_float_voltage,
+    set_battery_type,
+    set_charge_source_priority,
+    set_direct_data,
+    set_direct_data_agent,
+    set_max_combined_charge_current,
+    set_max_utility_charge_current,
+    set_output_source_priority,
+    set_rated_battery_voltage,
+)
+from ..protocols.agent_http import AGENT_STALE_THRESHOLD_MS
+from ..protocols.modbus_rtu import (
+    UNIT_ID,
+)
+from ..protocols.modbus_rtu import (
+    read_smg2_snapshot as read_modbus_snapshot_async,
+)
+from ..protocols.modbus_rtu import (
+    smg2_to_qpigs as modbus_to_qpigs,
+)
+from ..protocols.modbus_rtu import (
+    smg2_to_qpiri as modbus_to_qpiri,
+)
+
+__all__ = [
+    "ACInputVoltageRange",
+    "AGENT_STALE_THRESHOLD_MS",
+    "BatteryType",
+    "BatteryTypeSetting",
+    "ChargerSourcePriority",
+    "ChargeSourcePrioritySetting",
+    "DeviceStatusBitsB10B8",
+    "DeviceStatusBitsB7B0",
+    "OperatingMode",
+    "OutputSourcePriority",
+    "OutputSourcePrioritySetting",
+    "ParallelMode",
+    "UNIT_ID",
+    "crc16",
+    "decode_ascii_response",
+    "decode_direct_response",
+    "decode_qbeqi",
+    "decode_qflag",
+    "decode_qid",
+    "decode_qmn",
+    "decode_qmod",
+    "decode_qpigs",
+    "decode_qpigs2",
+    "decode_qpiri",
+    "decode_qvfw",
+    "direct_commands",
+    "get_command_hex",
+    "get_command_name_by_hex",
+    "get_direct_data",
+    "is_hex_string",
+    "modbus_crc16",
+    "modbus_to_qpigs",
+    "modbus_to_qpiri",
+    "parse_device_status_bits_b10_b8",
+    "parse_device_status_bits_b7_b0",
+    "read_modbus_snapshot_async",
+    "set_battery_bulk_voltage",
+    "set_battery_charge_current",
+    "set_battery_float_voltage",
+    "set_battery_type",
+    "set_charge_source_priority",
+    "set_direct_data",
+    "set_direct_data_agent",
+    "set_max_combined_charge_current",
+    "set_max_utility_charge_current",
+    "set_output_source_priority",
+    "set_rated_battery_voltage",
+    "transform_qpiri_value",
+]

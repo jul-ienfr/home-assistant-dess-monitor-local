@@ -2,13 +2,11 @@
 
 > **Dépôt** : ce projet est hébergé sur
 > [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local).
-> La branche **par défaut** est
-> [`archive/dess-monitor-local`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local) :
-> elle contient l'intégration DESS Monitor Local pour le Marketplace
-> (ex-HACS), tag `v1.1.0-beta.3-anenji.3`. Le firmware ESPHome décrit ici est
-> sur la branche
-> [`main`](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/main).
-> Format Marketplace et publication : [MARKETPLACE.md](MARKETPLACE.md).
+> La branche `main` contient à la fois le firmware ESPHome décrit ici et
+> l'intégration **DESS Monitor Local** pour le Marketplace (ex-HACS) :
+> `hacs.json`, `custom_components/dess_monitor_local/`, documentation dans
+> [`INTEGRATION.md`](INTEGRATION.md). Format Marketplace et publication :
+> [MARKETPLACE.md](MARKETPLACE.md).
 
 Firmware ESPHome pour surveiller et piloter un onduleur solaire hybride
 **Anenji / EASUN / ISolar SMG-II** (4,2 kW / 6,2 kW) via Modbus RTU, depuis Home
@@ -99,8 +97,8 @@ DE/RE.
 ## Démarrage rapide
 
 ```powershell
-# 1. Cloner le dépôt (la branche par défaut contient l'intégration)
-git clone -b main https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
+# 1. Cloner le dépôt
+git clone https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
 cd home-assistant-dess-monitor-local
 
 # 2. Créer les secrets
@@ -200,9 +198,14 @@ doivent pas être flashées telles quelles.
 ## Structure du dépôt
 
 ```text
-anenji.yaml                  # configuration principale
+anenji.yaml                  # configuration principale ESPHome
 secrets.yaml.example         # modèle de secrets
-README.md                    # ce fichier
+README.md                    # ce fichier (firmware ESPHome)
+INTEGRATION.md               # documentation de l'intégration DESS Monitor Local
+hacs.json                    # métadonnées Marketplace
+custom_components/           # intégration DESS Monitor Local
+tests/                       # tests de l'intégration
+wiki/                        # documentation de l'intégration
 WIRING.md                    # câblage RS232 / RS485
 PROTOCOL.md                  # carte de registres SMG-II
 REMOTE_ACCESS.md             # contrôle sans ESP32 (comparaison des voies)
@@ -237,9 +240,9 @@ specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickst
 - [attilagyurman/anenji-local-modbus](https://github.com/attilagyurman/anenji-local-modbus)
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
-- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local/tree/archive/dess-monitor-local)
-  — beta.3 avec SUB, PN complet et SOC réel, sur la branche par défaut
-  `archive/dess-monitor-local` (tag `v1.1.0-beta.3-anenji.3`).
+- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
+  — beta.3 avec SUB, PN complet et SOC réel, intégré sur `main`
+  (release `v1.1.0-beta.3-anenji.3`).
 - [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
 
 ## Licence
