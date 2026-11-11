@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0-beta.4-anenji.6 — 2026-11-11
 
 ### Changed
 
@@ -12,6 +12,11 @@
 - **All documentation links were checked against the new tree.** The README
   is a Marketplace-ready landing page; `INTEGRATION.md`, `EYBOND_LOCAL.md`,
   `PROTOCOL.md` and `MARKETPLACE.md` no longer reference the removed files.
+
+### Notes
+
+- No integration behaviour changed in this release. It publishes the cleaned
+  repository and the rewritten documentation.
 
 ## 1.1.0-beta.4-anenji.5 — 2026-11-11
 
