@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.5 — 2026-11-11
+
+### Added
+
+- **A new diagnostic sensor, *Last live sample* / *Dernier échantillon
+  live*, exposes the wall-clock time of the last successful QPIGS read.**
+  Its `age_seconds` attribute keeps growing while the dongle is silent,
+  and `stale` / `stale_cycles` mirror the QPIGS failure counter. This makes
+  a dongle that stopped answering visible before every entity flips
+  unavailable.
+- **Inverter endpoint identity is now stable across an IP or hostname
+  change.** Single-device entries persist the original endpoint as
+  `device_id`; editing the host in the options keeps the same entity
+  unique IDs, HA device and history. Legacy entries adopt their current
+  URI as the stable ID on the first save.
+- **The host field now documents the resilient setup:** use a DHCP
+  reservation or a local hostname (e.g. `inverter.local`) so an inverter
+  IP change is resolved automatically.
+
+### Fixed
+
+- **The EyBond announcer no longer caches Home Assistant's IP forever.**
+  When `Announce IP` is left empty, the local address is re-checked every
+  30 s while the listener runs. If a DHCP lease change moves Home
+  Assistant to a new address (and subnet), the next `set>server` payload
+  and UDP broadcast target are updated automatically, so dongles can
+  reconnect without a Home Assistant restart. An explicit announce IP is
+  still used verbatim for Docker bridge setups.
+- **Energy accumulators no longer bridge a data outage.** A trapezoidal
+  step is skipped when the source section is stale (for example QPIGS
+  failed while QPIRI was read) or when the elapsed gap exceeds
+  `max(5 × poll interval, 60 s)`. The integrator restarts from a fresh
+  sample after recovery instead of counting energy the inverter never
+  reported.
+- **Update intervals are clamped and EyBond now has a 5 s floor.** Values
+  below 1 s or above 300 s are rejected/clamped in the coordinator and all
+  configuration flows. EyBond dongles cycle their TCP session every few
+  seconds, so a 1 s poll mostly hit connection gaps; the effective
+  interval is now at least 5 s (the stored option is raised on the next
+  save). The coordinator also reports the stored and effective intervals
+  in diagnostics.
+
+### Notes
+
+- Existing entity IDs and unique IDs are unchanged. A legacy EyBond entry
+  configured at 1 s runs at 5 s immediately and stores 5 s the next time
+  its options are saved.
+- Restart Home Assistant after installing this release so the new sensor
+  and coordinator/announcer code are loaded.
+
 ## 1.1.0-beta.4-anenji.4 — 2026-11-11
 
 ### Fixed
