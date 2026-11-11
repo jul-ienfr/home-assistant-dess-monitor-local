@@ -51,3 +51,37 @@ def max_step_wh(elapsed_seconds: float) -> float:
     startup, when ``elapsed_seconds`` can be near zero.
     """
     return max(MAX_PLAUSIBLE_POWER_W * elapsed_seconds / 3600.0, 100.0)
+
+
+# Energy integration must not bridge a data outage. The classic DESS
+# integration uses 5x the poll interval; a 60s floor keeps short intervals
+# (1s serial/TCP) from pausing on a single slow cycle.
+ENERGY_GAP_INTERVAL_MULTIPLIER = 5.0
+MIN_ENERGY_GAP_SECONDS = 60.0
+
+
+def max_energy_gap_seconds(update_interval_seconds: float | None) -> float:
+    """Maximum elapsed time a single trapezoidal step may cover."""
+    if not update_interval_seconds or update_interval_seconds <= 0:
+        return MIN_ENERGY_GAP_SECONDS
+    return max(
+        ENERGY_GAP_INTERVAL_MULTIPLIER * update_interval_seconds,
+        MIN_ENERGY_GAP_SECONDS,
+    )
+
+
+def should_integrate_energy(
+    *,
+    elapsed_seconds: float,
+    update_interval_seconds: float | None,
+    source_stale: bool,
+) -> bool:
+    """Whether an energy sensor may accumulate this step.
+
+    ``source_stale`` covers a frozen section whose coordinator update still
+    succeeded (for example QPIGS failed while QPIRI was read); the elapsed
+    cap covers a real gap when no coordinator update ran at all.
+    """
+    if source_stale or elapsed_seconds < 0:
+        return False
+    return elapsed_seconds <= max_energy_gap_seconds(update_interval_seconds)

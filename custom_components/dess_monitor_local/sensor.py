@@ -15,6 +15,7 @@ from custom_components.dess_monitor_local.sensors.direct_sensor import (
     MODBUS_UNSUPPORTED_QPIRI_KEYS,
     MODBUS_UNSUPPORTED_SENSORS,
     PI18_SENSORS,
+    DirectLastSampleSensor,
     generate_qpiri_sensors,
 )
 
@@ -79,6 +80,7 @@ async def async_setup_entry(
             DirectBatteryTimeToFullSensor(item, hub.direct_coordinator, soc_sensor),
             DirectBatteryBackupTimeSensor(item, hub.direct_coordinator, soc_sensor, hass),
             DirectBatteryVSocLastSyncSensor(item, hub.direct_coordinator, soc_sensor),
+            DirectLastSampleSensor(item, hub.direct_coordinator),
         ])
         if not is_modbus:
             # QPIGS2 is not implemented by SMG-II; the energy sensor would

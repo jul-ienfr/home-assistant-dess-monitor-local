@@ -42,8 +42,8 @@
           "host": "Interface locale sur laquelle ouvrir l'écouteur TCP (généralement 0.0.0.0).",
           "port": "Port TCP sur lequel les dongles se reconnectent (8899 par défaut).",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local aux dongles.",
-          "eybond_announce_ip": "IP annoncée aux dongles. Laissez vide pour la détection automatique ; indiquez l'IP LAN de l'hôte en mode bridge Docker.",
-          "update_interval": "Fréquence d'interrogation de chaque onduleur enfant activé."
+          "eybond_announce_ip": "IP annoncée aux dongles. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "update_interval": "Intervalle d'interrogation de base pour chaque onduleur enfant activé. Minimum 5 s avec les dongles EyBond (session TCP cyclique) ; la période réelle est cet intervalle plus la durée du cycle."
         }
       },
       "protocol": {
@@ -75,14 +75,14 @@
           "strict_crc": "Validation CRC stricte"
         },
         "data_description": {
-          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond.",
+          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond. Privilégiez une réservation DHCP ou un nom d'hôte local (par ex. onduleur.local) : l'IP peut alors changer sans modifier l'intégration.",
           "port": "Port TCP. Valeurs par défaut : 8899 pour TCP/Modbus/EyBond direct, 8787 pour l'agent local.",
           "serial_device": "Chemin du périphérique USB / RS232. Vous pouvez aussi saisir un chemin manuellement.",
           "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
           "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
-          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique.",
-          "update_interval": "Fréquence d'interrogation de l'appareil. Une valeur plus basse donne des mises à jour plus fréquentes.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "update_interval": "Intervalle d'interrogation de base. Minimum 5 s avec un dongle EyBond (session TCP cyclique), 1 s pour les autres transports. La période réelle est cet intervalle plus la durée du cycle.",
           "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
         }
       }
@@ -133,6 +133,9 @@
           "eybond_broadcast": "Adresse de diffusion",
           "eybond_announce_ip": "IP annoncée",
           "update_interval": "Intervalle de mise à jour (secondes)"
+        },
+        "data_description": {
+          "update_interval": "Intervalle d'interrogation de base. Minimum 5 s avec les dongles EyBond (session TCP cyclique) ; la période réelle est cet intervalle plus la durée du cycle."
         }
       },
       "protocol": {
@@ -165,14 +168,14 @@
           "debug_panel": "Afficher le panneau de diagnostic dans la barre latérale"
         },
         "data_description": {
-          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond.",
+          "host": "Nom d'hôte ou adresse IP de l'onduleur, de la passerelle, de l'agent, ou de l'interface d'écoute EyBond. Privilégiez une réservation DHCP ou un nom d'hôte local (par ex. onduleur.local) : l'IP peut alors changer sans modifier l'intégration.",
           "port": "Port TCP. Valeurs par défaut : 8899 pour TCP/Modbus/EyBond direct, 8787 pour l'agent local.",
           "serial_device": "Chemin du périphérique USB / RS232. Vous pouvez aussi saisir un chemin manuellement.",
           "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
           "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
-          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique.",
-          "update_interval": "Fréquence d'interrogation de l'appareil. Une valeur plus basse donne des mises à jour plus fréquentes.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "update_interval": "Intervalle d'interrogation de base. Minimum 5 s avec un dongle EyBond (session TCP cyclique), 1 s pour les autres transports. La période réelle est cet intervalle plus la durée du cycle.",
           "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
         }
       },
@@ -433,6 +436,9 @@
       },
       "direct_vsoc_last_sync": {
         "name": "Dernière synchro pleine charge"
+      },
+      "direct_last_sample": {
+        "name": "Dernier échantillon live"
       },
       "discovered_dongles": {
         "name": "Dongles détectés"

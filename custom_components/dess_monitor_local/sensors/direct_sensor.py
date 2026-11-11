@@ -92,6 +92,59 @@ class DirectSensorBase(CoordinatorEntity, SensorEntity):
         return self.coordinator.data[self._inverter_device.inverter_id]
 
 
+class DirectLastSampleSensor(DirectSensorBase):
+    """Diagnostic: wall-clock time of the last successful QPIGS read.
+
+    ``stale`` on the data sensors tells whether the *current* section is
+    frozen; this timestamp tells *how long* the live telemetry has been
+    frozen. Automations can use ``age_seconds`` (or the timestamp itself)
+    to alert on a dongle that stopped answering without waiting for the
+    entity to flip unavailable.
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_translation_key = "direct_last_sample"
+    _attr_icon = "mdi:clock-check-outline"
+
+    def __init__(self, inverter_device: InverterDevice, coordinator: DirectCoordinator):
+        super().__init__(inverter_device, coordinator)
+        self._attr_unique_id = f"{inverter_device.inverter_id}_direct_last_sample"
+        last_success = getattr(coordinator, "last_success", None)
+        self._attr_native_value = (
+            last_success(inverter_device.inverter_id)
+            if callable(last_success)
+            else None
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_native_value = self.coordinator.last_success(
+            self._inverter_device.inverter_id
+        )
+        self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self):
+        attrs = dict(getattr(self, "_attr_extra_state_attributes", None) or {})
+        coordinator = getattr(self, "coordinator", None)
+        device = getattr(self, "_inverter_device", None)
+        if coordinator is not None and device is not None:
+            last_success_age = getattr(coordinator, "last_success_age", None)
+            attrs["age_seconds"] = (
+                round(last_success_age(device.inverter_id), 1)
+                if callable(last_success_age)
+                else None
+            )
+            section_failures = getattr(coordinator, "section_failures", None)
+            if callable(section_failures):
+                stale = section_failures(device.inverter_id, "qpigs")
+                attrs["stale_cycles"] = stale
+                attrs["stale"] = stale > 0
+        return attrs
+
+
 class DirectTypedSensorBase(DirectSensorBase):
     """Абстрактный базовый класс для сенсоров, получающих значение по ключу."""
 

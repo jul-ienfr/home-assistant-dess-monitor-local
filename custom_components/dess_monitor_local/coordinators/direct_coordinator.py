@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import async_timeout
 from homeassistant.core import HomeAssistant
@@ -16,12 +16,17 @@ from custom_components.dess_monitor_local.api.commands.direct_command_queue impo
 from custom_components.dess_monitor_local.api.dispatcher import get_direct_data
 from custom_components.dess_monitor_local.const import (
     CONF_DEVICE,
+    CONF_DEVICE_ID,
+    CONF_ENTRY_KIND,
     CONF_NAME,
     CONF_PROTOCOL,
     CONF_STRICT_CRC,
+    CONF_TRANSPORT,
     CONF_UPDATE_INTERVAL,
     DEFAULT_STRICT_CRC,
     DEFAULT_UPDATE_INTERVAL,
+    ENTRY_KIND_EYBOND_HUB,
+    MIN_EYBOND_UPDATE_INTERVAL,
     PROTOCOL_VOLTRONIC,
 )
 from custom_components.dess_monitor_local.coordinators.device_target import DeviceTarget
@@ -32,8 +37,17 @@ from custom_components.dess_monitor_local.coordinators.failure_tracker import (
 from custom_components.dess_monitor_local.coordinators.rejection import (
     is_rejected,
 )
+from custom_components.dess_monitor_local.timing import (
+    clamp_update_interval,
+    min_update_interval,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    """Wall-clock UTC now, isolated so tests can freeze it."""
+    return datetime.now(UTC)
 
 
 def _qpiri_values_match(fetched, expected) -> bool:
@@ -98,9 +112,30 @@ class DirectCoordinator(DataUpdateCoordinator):
         discovery registry). When ``None``, the coordinator falls back to
         the legacy single ``CONF_DEVICE`` from the entry options.
         """
-        interval_seconds = int(
-            config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        entry_options = config_entry.options
+        target_uris = [
+            str(getattr(target, "uri", "")) for target in (targets or [])
+        ]
+        eybond = (
+            entry_options.get(CONF_ENTRY_KIND) == ENTRY_KIND_EYBOND_HUB
+            or any(uri.startswith("eybond") for uri in target_uris)
         )
+        minimum_interval = (
+            MIN_EYBOND_UPDATE_INTERVAL
+            if eybond
+            else min_update_interval(
+                transport=entry_options.get(CONF_TRANSPORT),
+                protocol=entry_options.get(CONF_PROTOCOL),
+                uri=entry_options.get(CONF_DEVICE),
+            )
+        )
+        interval_seconds = clamp_update_interval(
+            entry_options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+            minimum=minimum_interval,
+        )
+        # Keep both values: the stored option is user intent, this is what
+        # the coordinator actually schedules (EyBond rounds up to 5 s).
+        self.configured_interval_seconds = interval_seconds
         super().__init__(
             hass,
             _LOGGER,
@@ -119,6 +154,10 @@ class DirectCoordinator(DataUpdateCoordinator):
         self._failures = FailureTracker(self._MAX_CONSECUTIVE_FAILURES)
         # Cycle counter driving the split poll cadence (see _CMD_SCHEDULE).
         self._cycle = 0
+        # Wall-clock time of the last successful QPIGS read, per target id.
+        # Failures leave the old value in place so the diagnostic sensor's age
+        # keeps growing instead of claiming a fresh sample.
+        self._last_success: dict[str, datetime] = {}
         # Sections that must be refreshed on the next cycle even if their
         # normal cadence says otherwise (used by the select entities after
         # a write so the optimistic value is confirmed immediately).
@@ -163,6 +202,21 @@ class DirectCoordinator(DataUpdateCoordinator):
             )
             out[key] = "ok" if n == 0 else f"fail:{n}"
         return out
+
+    def _mark_success(self, device_id: str) -> None:
+        """Record a successful live-telemetry (QPIGS) read."""
+        self._last_success[device_id] = _utcnow()
+
+    def last_success(self, device_id: str) -> datetime | None:
+        """Timestamp of the last successful QPIGS read, or None."""
+        return self._last_success.get(device_id)
+
+    def last_success_age(self, device_id: str) -> float | None:
+        """Seconds since the last successful QPIGS read, or None."""
+        timestamp = self._last_success.get(device_id)
+        if timestamp is None:
+            return None
+        return max(0.0, (_utcnow() - timestamp).total_seconds())
 
     def force_section(self, section: str) -> None:
         """Refresh *section* on the next poll regardless of its cadence.
@@ -235,7 +289,8 @@ class DirectCoordinator(DataUpdateCoordinator):
         if self._targets is not None:
             return list(self._targets)
 
-        device = self.config_entry.options.get(CONF_DEVICE, None)
+        options = self.config_entry.options
+        device = options.get(CONF_DEVICE, None)
         if not device:
             # No device URI configured (entry created but never finished setup,
             # or options got wiped). Returning an empty list lets the
@@ -246,11 +301,18 @@ class DirectCoordinator(DataUpdateCoordinator):
                 self.config_entry.entry_id,
             )
             return []
-        # Legacy single-device entry: id == uri preserves existing
-        # entity unique_ids and HA device identifiers.
-        protocol = self.config_entry.options.get(CONF_PROTOCOL, PROTOCOL_VOLTRONIC)
+        # ``device_id`` is the original URI captured when the entry was
+        # created/edited; it survives an IP or hostname change so entity
+        # unique_ids and the HA device stay the same. Legacy entries without
+        # it keep id == current uri (their historical behavior).
+        stable_id = options.get(CONF_DEVICE_ID) or device
+        protocol = options.get(CONF_PROTOCOL, PROTOCOL_VOLTRONIC)
         name = self.config_entry.data.get(CONF_NAME) or "Inverter"
-        return [DeviceTarget(id=device, uri=device, protocol=protocol, name=name)]
+        return [
+            DeviceTarget(
+                id=stable_id, uri=device, protocol=protocol, name=name
+            )
+        ]
 
     async def _async_update_data(self):
         strict_crc = bool(
@@ -313,6 +375,8 @@ class DirectCoordinator(DataUpdateCoordinator):
                         return {}
                     else:
                         self._failures.on_success(key, cmd)
+                        if section == "qpigs":
+                            self._mark_success(key)
                         if section == "qpiri" and isinstance(result, dict):
                             self._apply_qpiri_overrides(key, result)
                         return result

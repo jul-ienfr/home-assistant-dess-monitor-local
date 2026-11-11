@@ -21,11 +21,25 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
 from .api.protocols.eybond_dongle import _parse_pn_from_uri, parse_eybond_uri
-from .const import DOMAIN
+from .const import CONF_UPDATE_INTERVAL, DOMAIN
 from .frame_log import snapshot as _frame_snapshot
 from .frame_log import snapshot_for as _frame_snapshot_for
 
 _REDACT_KEYS = {"host", "device", "serial_device", "agent_device_id"}
+
+
+def _last_success_info(coordinator: Any, device_id: str | None) -> dict[str, Any]:
+    """Last QPIGS success timestamp/age, tolerant of lightweight test fakes."""
+    if device_id is None:
+        return {"last_success": None, "last_success_age_seconds": None}
+    last_success = getattr(coordinator, "last_success", None)
+    last_success_age = getattr(coordinator, "last_success_age", None)
+    timestamp = last_success(device_id) if callable(last_success) else None
+    age = last_success_age(device_id) if callable(last_success_age) else None
+    return {
+        "last_success": timestamp.isoformat() if timestamp else None,
+        "last_success_age_seconds": age,
+    }
 
 
 def _coordinator_section(entry: ConfigEntry) -> dict[str, Any]:
@@ -34,9 +48,14 @@ def _coordinator_section(entry: ConfigEntry) -> dict[str, Any]:
     coordinator = getattr(entry.runtime_data, "direct_coordinator", None)
     if coordinator is None:
         return {"present": False}
+    options = getattr(entry, "options", None) or {}
     return {
         "present": True,
         "last_update_success": coordinator.last_update_success,
+        "stored_update_interval_seconds": options.get(CONF_UPDATE_INTERVAL),
+        "configured_interval_seconds": getattr(
+            coordinator, "configured_interval_seconds", None
+        ),
         "update_interval_seconds": (
             coordinator.update_interval.total_seconds()
             if coordinator.update_interval is not None
@@ -48,6 +67,7 @@ def _coordinator_section(entry: ConfigEntry) -> dict[str, Any]:
                 "uri": getattr(t, "uri", t),
                 "protocol": getattr(t, "protocol", None),
                 "name": getattr(t, "name", None),
+                **_last_success_info(coordinator, getattr(t, "id", t)),
             }
             for t in (coordinator.devices or [])
         ],
@@ -141,18 +161,30 @@ async def async_get_device_diagnostics(
         counts = getattr(getattr(coordinator, "_failures", None), "_counts", {}) or {}
         coordinator_section.update({
             "last_update_success": coordinator.last_update_success,
+            "configured_interval_seconds": getattr(
+                coordinator, "configured_interval_seconds", None
+            ),
             "update_interval_seconds": (
                 coordinator.update_interval.total_seconds()
                 if coordinator.update_interval is not None
                 else None
             ),
             "consecutive_failures": dict(counts.get(device_id) or {}),
+            **_last_success_info(coordinator, device_id),
         })
 
+    # A stable id captured before an IP change still contains the old URI;
+    # redact anything endpoint-shaped, not only an exact match with the
+    # current target.
+    id_is_endpoint = bool(device_id) and (
+        "://" in device_id
+        or device_id.startswith(("/", "\\"))
+        or (uri is not None and device_id == uri)
+    )
     return {
         "device": {
             # Legacy device entries use the URI (host / serial path) as id.
-            "id": "**REDACTED**" if uri is not None and device_id == uri else device_id,
+            "id": "**REDACTED**" if id_is_endpoint else device_id,
             "target": target_section,
             "direct_data": device_data,
         },

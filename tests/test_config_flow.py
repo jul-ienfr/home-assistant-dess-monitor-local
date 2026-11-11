@@ -20,6 +20,7 @@ from homeassistant.data_entry_flow import FlowResultType  # noqa: E402
 from custom_components.dess_monitor_local.config_flow import _parse_device_uri  # noqa: E402
 from custom_components.dess_monitor_local.const import (  # noqa: E402
     CONF_DEVICE,  # noqa: E402
+    CONF_DEVICE_ID,
     CONF_ENTRY_KIND,
     CONF_EYBOND_ANNOUNCE_IP,
     CONF_EYBOND_BIND_HOST,
@@ -95,6 +96,9 @@ async def test_full_flow_voltronic_tcp_elfin(hass, enable_custom_integrations):
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Test Inv"
     assert result["options"][CONF_DEVICE] == "tcp://192.168.1.50:8899"
+    # Identity is captured at creation so a later IP/hostname edit does not
+    # orphan the entities.
+    assert result["options"][CONF_DEVICE_ID] == "tcp://192.168.1.50:8899"
     assert result["options"][CONF_PROTOCOL] == PROTOCOL_VOLTRONIC
     assert result["options"][CONF_TRANSPORT] == TRANSPORT_TCP_ELFIN
 

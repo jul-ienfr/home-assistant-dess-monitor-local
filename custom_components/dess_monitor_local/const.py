@@ -5,6 +5,11 @@ DOMAIN = "dess_monitor_local"
 # Config / options keys
 CONF_NAME = "name"
 CONF_DEVICE = "device"
+# Stable identity for a single-device entry, independent of the transport
+# URI. Existing entries keep their original device URI here so changing the
+# inverter IP/hostname does not change entity unique_ids or the device
+# registry identifier. Absent = legacy entry (id falls back to CONF_DEVICE).
+CONF_DEVICE_ID = "device_id"
 CONF_PROTOCOL = "protocol"
 CONF_TRANSPORT = "transport"
 CONF_HOST = "host"
@@ -111,5 +116,9 @@ DEFAULT_EYBOND_BROADCAST = "255.255.255.255"
 DEFAULT_EYBOND_ANNOUNCE_IP = ""
 DEFAULT_UPDATE_INTERVAL = 10
 MIN_UPDATE_INTERVAL = 1
+# EyBond dongles clean-close/reopen their TCP session every ~4s and wait up to
+# 3s for a forwarded command; a 1s poll mostly hits session gaps. Five seconds
+# is the practical floor (same as the other DESS local integrations).
+MIN_EYBOND_UPDATE_INTERVAL = 5
 MAX_UPDATE_INTERVAL = 300
 DEFAULT_STRICT_CRC = False

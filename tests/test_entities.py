@@ -12,6 +12,9 @@ event loop or hass fixture required, so it stays fast and version-robust.
 CI runners without Home Assistant (the 3.12/3.13 pure matrix) skip this
 whole module via ``importorskip``. A separate CI job installs HA to run it.
 """
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
+
 import pytest
 
 pytest.importorskip("homeassistant")
@@ -34,12 +37,33 @@ class _Dev:
 
 class _Coord:
     """Minimal stand-in for the DataUpdateCoordinator."""
-    def __init__(self, data):
+    def __init__(
+        self,
+        data,
+        *,
+        interval=10,
+        failures=None,
+        last_success=None,
+        last_success_age=None,
+    ):
         self.data = {"easun_4200": data}
+        self.update_interval = timedelta(seconds=interval) if interval else None
+        self._failures = dict(failures or {})
+        self._last_success = last_success
+        self._last_success_age = last_success_age
 
     # CoordinatorEntity registers a listener on add; never called here.
     def async_add_listener(self, *a, **k):
         return lambda: None
+
+    def section_failures(self, device_id, section):
+        return self._failures.get(section, 0)
+
+    def last_success(self, device_id):
+        return self._last_success
+
+    def last_success_age(self, device_id):
+        return self._last_success_age
 
 
 def _neutralise_write(entity):
@@ -232,6 +256,100 @@ class TestTimeToFull:
 def ds_energy_time_to_full(soc_sensor, qpigs):
     ent = des.DirectBatteryTimeToFullSensor(_Dev(), _Coord({"qpigs": qpigs}), soc_sensor)
     return _neutralise_write(ent)
+
+
+# ---------------------------------------------------------------------------
+# DirectLastSampleSensor — freshness / age of the live telemetry
+# ---------------------------------------------------------------------------
+class TestLastSampleSensor:
+    TS = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+
+    def _make(self, **kwargs):
+        ent = ds.DirectLastSampleSensor(_Dev(), _Coord({}, **kwargs))
+        return _neutralise_write(ent)
+
+    def test_exposes_timestamp_and_age(self):
+        ent = self._make(last_success=self.TS, last_success_age=12.3)
+        ent._handle_coordinator_update()
+        assert ent._attr_native_value == self.TS
+        attrs = ent.extra_state_attributes
+        assert attrs["age_seconds"] == 12.3
+        assert attrs["stale_cycles"] == 0
+        assert attrs["stale"] is False
+
+    def test_marks_stale_after_failed_qpigs(self):
+        ent = self._make(
+            last_success=self.TS,
+            last_success_age=95.0,
+            failures={"qpigs": 3},
+        )
+        ent._handle_coordinator_update()
+        attrs = ent.extra_state_attributes
+        assert attrs["age_seconds"] == 95.0
+        assert attrs["stale_cycles"] == 3
+        assert attrs["stale"] is True
+
+    def test_no_sample_yet(self):
+        ent = self._make()
+        ent._handle_coordinator_update()
+        assert ent._attr_native_value is None
+        attrs = ent.extra_state_attributes
+        assert attrs["age_seconds"] is None
+        assert attrs["stale"] is False
+
+
+# ---------------------------------------------------------------------------
+# Energy integration guard — no accumulation across stale data or outages
+# ---------------------------------------------------------------------------
+class TestEnergyIntegrationGuard:
+    def _make(self, failures=None, interval=10):
+        coord = _Coord(
+            {"qpigs": {"pv_charging_power": "1000"}},
+            interval=interval,
+            failures=failures,
+        )
+        return _neutralise_write(des.DirectPVEnergySensor(_Dev(), coord))
+
+    def test_accumulates_normal_cycle(self):
+        ent = self._make()
+        with patch.object(des.time, "monotonic", return_value=1000.0):
+            ent._prev_power = 1000.0
+            ent._prev_ts = 990.0
+            ent.update_energy_value(1000.0)
+        assert ent._attr_native_value == pytest.approx(2000.0 * 10.0 / 3600.0)
+        assert ent._prev_power == 1000.0
+
+    def test_pauses_when_qpigs_is_stale(self):
+        ent = self._make(failures={"qpigs": 1})
+        with patch.object(des.time, "monotonic", return_value=1000.0):
+            ent._prev_power = 1000.0
+            ent._prev_ts = 990.0
+            ent.update_energy_value(1000.0)
+        assert ent._attr_native_value == 0.0
+        assert ent._prev_power is None
+
+    def test_pauses_after_long_gap(self):
+        ent = self._make(interval=10)
+        with patch.object(des.time, "monotonic", return_value=1000.0):
+            ent._prev_power = 1000.0
+            ent._prev_ts = 1000.0 - 120.0
+            ent.update_energy_value(1000.0)
+        assert ent._attr_native_value == 0.0
+        assert ent._prev_power is None
+
+    def test_recovery_starts_a_fresh_trapezoid(self):
+        ent = self._make(failures={"qpigs": 2})
+        with patch.object(des.time, "monotonic", return_value=1000.0):
+            ent._prev_power = 1000.0
+            ent._prev_ts = 990.0
+            ent.update_energy_value(1000.0)
+            # Source is healthy again on the next tick.
+            ent.coordinator._failures["qpigs"] = 0
+            ent.update_energy_value(1000.0)
+        # First healthy tick only seeds the integrator; the outage was not
+        # bridged by a trapezoid.
+        assert ent._attr_native_value == 0.0
+        assert ent._prev_power == 1000.0
 
 
 class TestOfflineChildCrashSafety:

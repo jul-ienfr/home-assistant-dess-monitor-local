@@ -23,6 +23,7 @@ from .const import (
     CONF_AGENT_DEVICE_ID,
     CONF_DEBUG_PANEL,
     CONF_DEVICE,
+    CONF_DEVICE_ID,
     CONF_ENTRY_KIND,
     CONF_EYBOND_ANNOUNCE_IP,
     CONF_EYBOND_BIND_HOST,
@@ -53,6 +54,7 @@ from .const import (
     ENTRY_KIND_EYBOND_HUB,
     LEGACY_PROTOCOL_TRANSPORT,
     MAX_UPDATE_INTERVAL,
+    MIN_EYBOND_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
     PROTOCOL_AGENT,
     PROTOCOL_MODBUS,
@@ -66,6 +68,7 @@ from .const import (
     TRANSPORT_TCP_ELFIN,
     TRANSPORTS_BY_PROTOCOL,
 )
+from .timing import clamp_update_interval, min_update_interval
 
 # Per-child protocol options offered in the hub device-management UI.
 # "none" means unconfigured → the child is tracked but not polled. Agent is
@@ -304,10 +307,10 @@ def _parse_device_uri(device: str) -> dict[str, Any]:
     }
 
 
-def _update_interval_field() -> Any:
+def _update_interval_field(minimum: int = MIN_UPDATE_INTERVAL) -> Any:
     return NumberSelector(
         NumberSelectorConfig(
-            min=MIN_UPDATE_INTERVAL,
+            min=minimum,
             max=MAX_UPDATE_INTERVAL,
             step=1,
             mode=NumberSelectorMode.BOX,
@@ -400,12 +403,19 @@ async def _build_connection_schema(
                 )
             ] = cv.string
 
+    minimum_interval = min_update_interval(
+        transport=transport,
+        protocol=protocol,
+    )
     schema[
         vol.Required(
             CONF_UPDATE_INTERVAL,
-            default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+            default=clamp_update_interval(
+                defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                minimum=minimum_interval,
+            ),
         )
-    ] = _update_interval_field()
+    ] = _update_interval_field(minimum_interval)
 
     if protocol in _CRC_CAPABLE_PROTOCOLS:
         schema[
@@ -464,8 +474,11 @@ def _hub_listener_schema(defaults: dict[str, Any]) -> vol.Schema:
             ): cv.string,
             vol.Required(
                 CONF_UPDATE_INTERVAL,
-                default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
-            ): _update_interval_field(),
+                default=clamp_update_interval(
+                    defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=MIN_EYBOND_UPDATE_INTERVAL,
+                ),
+            ): _update_interval_field(MIN_EYBOND_UPDATE_INTERVAL),
         }
     )
 
@@ -562,8 +575,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input.get(CONF_EYBOND_ANNOUNCE_IP)
                     or DEFAULT_EYBOND_ANNOUNCE_IP
                 ).strip()
-                update_interval = int(
-                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+                update_interval = clamp_update_interval(
+                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=MIN_EYBOND_UPDATE_INTERVAL,
                 )
                 return self.async_create_entry(
                     title=name,
@@ -639,8 +653,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input.get(CONF_EYBOND_ANNOUNCE_IP)
                     or DEFAULT_EYBOND_ANNOUNCE_IP
                 ).strip()
-                update_interval = int(
-                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+                update_interval = clamp_update_interval(
+                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=min_update_interval(
+                        transport=transport,
+                        protocol=protocol,
+                    ),
                 )
                 strict_crc = bool(
                     user_input.get(CONF_STRICT_CRC, DEFAULT_STRICT_CRC)
@@ -658,6 +676,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PROTOCOL: protocol,
                         CONF_TRANSPORT: transport,
                         CONF_DEVICE: device_value,
+                        # Immutable identity for this inverter. A later IP or
+                        # hostname edit keeps the same entity unique_ids and
+                        # HA device entry.
+                        CONF_DEVICE_ID: device_value,
                         CONF_HOST: host,
                         CONF_PORT: port,
                         CONF_SERIAL_DEVICE: serial_device,
@@ -820,8 +842,12 @@ class OptionsFlow(config_entries.OptionsFlow):
                     user_input.get(CONF_EYBOND_ANNOUNCE_IP)
                     or DEFAULT_EYBOND_ANNOUNCE_IP
                 ).strip()
-                update_interval = int(
-                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+                update_interval = clamp_update_interval(
+                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=min_update_interval(
+                        transport=transport,
+                        protocol=protocol,
+                    ),
                 )
                 strict_crc = bool(
                     user_input.get(CONF_STRICT_CRC, DEFAULT_STRICT_CRC)
@@ -831,6 +857,15 @@ class OptionsFlow(config_entries.OptionsFlow):
                     protocol, transport, host, port, serial_device, agent_device_id,
                     eybond_devaddr, eybond_broadcast, eybond_announce_ip,
                 )
+                # Preserve the identity captured at creation (or the legacy
+                # URI on entries that predate the key). This is what lets a
+                # DHCP address change be fixed from the UI without orphaning
+                # every entity and its history.
+                stable_id = (
+                    self._config_entry.options.get(CONF_DEVICE_ID)
+                    or self._config_entry.options.get(CONF_DEVICE)
+                    or device_value
+                )
 
                 return self.async_create_entry(
                     title="",
@@ -838,6 +873,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                         CONF_PROTOCOL: protocol,
                         CONF_TRANSPORT: transport,
                         CONF_DEVICE: device_value,
+                        CONF_DEVICE_ID: stable_id,
                         CONF_HOST: host,
                         CONF_PORT: port,
                         CONF_SERIAL_DEVICE: serial_device,
@@ -897,8 +933,11 @@ def _hub_listener_options_schema(defaults: dict[str, Any]) -> vol.Schema:
             ): cv.string,
             vol.Required(
                 CONF_UPDATE_INTERVAL,
-                default=defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
-            ): _update_interval_field(),
+                default=clamp_update_interval(
+                    defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=MIN_EYBOND_UPDATE_INTERVAL,
+                ),
+            ): _update_interval_field(MIN_EYBOND_UPDATE_INTERVAL),
         }
     )
 
@@ -1080,8 +1119,9 @@ class EybondHubOptionsFlow(config_entries.OptionsFlow):
                 CONF_EYBOND_ANNOUNCE_IP: (
                     user_input.get(CONF_EYBOND_ANNOUNCE_IP) or ""
                 ).strip(),
-                CONF_UPDATE_INTERVAL: int(
-                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+                CONF_UPDATE_INTERVAL: clamp_update_interval(
+                    user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+                    minimum=MIN_EYBOND_UPDATE_INTERVAL,
                 ),
             }
             return self.async_create_entry(title="", data=self._bumped_options(extra))

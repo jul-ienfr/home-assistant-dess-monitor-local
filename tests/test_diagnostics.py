@@ -5,7 +5,7 @@ running instance — the entry, device and coordinator are lightweight fakes.
 """
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -22,15 +22,31 @@ from custom_components.dess_monitor_local.coordinators.failure_tracker import ( 
 )
 
 
-def _entry(targets, data=None, failures=None, success=False):
+def _entry(
+    targets,
+    data=None,
+    failures=None,
+    success=False,
+    *,
+    options=None,
+    configured_interval=10,
+    last_success=None,
+    last_success_age=None,
+):
     coordinator = SimpleNamespace(
         devices=targets,
         data=data or {},
         last_update_success=success,
-        update_interval=timedelta(seconds=10),
+        update_interval=timedelta(seconds=configured_interval),
+        configured_interval_seconds=configured_interval,
+        last_success=lambda device_id: last_success,
+        last_success_age=lambda device_id: last_success_age,
         _failures=failures or FailureTracker(),
     )
-    return SimpleNamespace(runtime_data=SimpleNamespace(direct_coordinator=coordinator))
+    return SimpleNamespace(
+        runtime_data=SimpleNamespace(direct_coordinator=coordinator),
+        options=dict(options or {}),
+    )
 
 
 def _device(device_id):
@@ -95,8 +111,27 @@ class TestLegacyDeviceEntry:
         assert out["device"]["target"]["transport"] == "tcp"
         assert out["device"]["direct_data"] == {"qpigs": {"v": 1}}
         assert out["coordinator"]["consecutive_failures"] == {}
+        assert out["coordinator"]["configured_interval_seconds"] == 10
+        assert out["coordinator"]["last_success"] is None
+        assert out["coordinator"]["last_success_age_seconds"] is None
         assert [e["raw_ascii"] for e in out["frames"]["QPIGS"]] == ["(1"]
         assert "10.0.0.7" not in repr(out)
+
+    def test_interval_and_last_sample_are_reported(self):
+        stamp = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+        out = _diag(
+            _entry(
+                [self.TARGET],
+                options={"update_interval": 1},
+                configured_interval=5,
+                last_success=stamp,
+                last_success_age=42.0,
+            ),
+            _device(self.URI),
+        )
+        assert out["coordinator"]["configured_interval_seconds"] == 5
+        assert out["coordinator"]["last_success"] == stamp.isoformat()
+        assert out["coordinator"]["last_success_age_seconds"] == 42.0
 
     def test_no_runtime_data(self):
         out = _diag(SimpleNamespace(runtime_data=None), _device(self.URI))

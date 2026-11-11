@@ -16,6 +16,7 @@ from custom_components.dess_monitor_local.sanity import (
     is_plausible_battery_voltage,
     is_plausible_power,
     max_step_wh,
+    should_integrate_energy,
 )
 from custom_components.dess_monitor_local.sensors.direct_sensor import (
     DirectSensorBase,
@@ -104,13 +105,53 @@ class DirectEnergySensorBase(RestoreSensor, DirectTypedSensorBase):
         """Сенсор доступен, только если устройство в сети и значение восстановлено."""
         return super().available and self._restored
 
+    def _source_is_stale(self) -> bool:
+        """True when the section feeding this accumulator is frozen.
+
+        The coordinator can succeed overall while one section failed (for
+        example QPIGS failed but QPIRI was read). In that case the sensor is
+        still called every cycle with the previous power value; integrating
+        it would count energy that the inverter never reported.
+        """
+        try:
+            return self.coordinator.section_failures(
+                self._inverter_device.inverter_id, self.data_section
+            ) > 0
+        except (AttributeError, KeyError, TypeError):
+            return False
+
+    def _update_interval_seconds(self) -> float | None:
+        interval = getattr(self.coordinator, "update_interval", None)
+        return interval.total_seconds() if interval else None
+
     def update_energy_value(self, current_value: float):
         now = time.monotonic()
         elapsed_seconds = now - self._prev_ts
+        source_stale = self._source_is_stale()
 
         # Гарантируем, что self._attr_native_value не None
         if self._attr_native_value is None:
             self._attr_native_value = 0.0
+
+        # A frozen source or a sleep/outage gap must not be bridged by a
+        # trapezoid: the inverter did not report power for that interval.
+        # Drop the previous sample so the first post-recovery tick starts a
+        # fresh integration instead of spanning the outage.
+        if not should_integrate_energy(
+            elapsed_seconds=elapsed_seconds,
+            update_interval_seconds=self._update_interval_seconds(),
+            source_stale=source_stale,
+        ):
+            _LOGGER.debug(
+                "%s: energy integration paused (stale=%s, gap=%.1fs)",
+                self.entity_id or self._attr_unique_id,
+                source_stale,
+                elapsed_seconds,
+            )
+            self._prev_power = None
+            self._prev_ts = now
+            self.async_write_ha_state()
+            return
 
         if self._prev_power is not None:
             # Trapezoidal average power × dt (в часах)

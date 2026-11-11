@@ -42,8 +42,8 @@
           "host": "Local interface to bind the TCP listener on (usually 0.0.0.0).",
           "port": "TCP port the dongles connect back to (default 8899).",
           "eybond_broadcast": "UDP broadcast target used to announce the local server to the dongles.",
-          "eybond_announce_ip": "IP advertised to the dongles. Leave empty for auto-detect; set the host LAN IP in Docker bridge mode.",
-          "update_interval": "How often to poll each enabled child inverter."
+          "eybond_announce_ip": "IP advertised to the dongles. Leave empty for auto-detect: the local address is re-checked every 30 s, so a DHCP change on Home Assistant is picked up automatically. Set the host LAN IP in Docker bridge mode.",
+          "update_interval": "Base polling interval for every enabled child inverter. Minimum 5 s with EyBond dongles (cycling TCP session); the effective period is this interval plus the cycle duration."
         }
       },
       "protocol": {
@@ -75,14 +75,14 @@
           "strict_crc": "Strict CRC validation"
         },
         "data_description": {
-          "host": "Hostname or IP address of the inverter, gateway, agent, or local bind interface for EyBond.",
+          "host": "Hostname or IP address of the inverter, gateway, agent, or local bind interface for EyBond. Prefer a DHCP reservation or a local hostname (e.g. inverter.local): the IP can then change without editing the integration.",
           "port": "TCP port. Defaults: 8899 for direct TCP/Modbus/EyBond, 8787 for the local agent.",
           "serial_device": "USB / RS232 device path. You can also type a path manually.",
           "agent_device_id": "providerDeviceId of the inverter exposed by solar-system-agent.",
           "eybond_devaddr": "RS485 slave address behind the EyBond dongle.",
           "eybond_broadcast": "UDP broadcast target used to announce the local server to the dongle.",
-          "eybond_announce_ip": "Optional IP address advertised to the dongle. Leave empty for auto-detect.",
-          "update_interval": "How often to poll the device. Lower values mean more frequent updates.",
+          "eybond_announce_ip": "Optional IP address advertised to the dongle. Leave empty for auto-detect: the local address is re-checked every 30 s, so a DHCP change on Home Assistant is picked up automatically. Set the host LAN IP in Docker bridge mode.",
+          "update_interval": "Base polling interval. Minimum 5 s with an EyBond dongle (cycling TCP session), 1 s for other transports. The effective period is this interval plus the cycle duration.",
           "strict_crc": "Drop Voltronic/PI18 frames with invalid CRC instead of trying to decode them."
         }
       }
@@ -133,6 +133,9 @@
           "eybond_broadcast": "Broadcast address",
           "eybond_announce_ip": "Announce IP",
           "update_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "update_interval": "Base polling interval. Minimum 5 s with EyBond dongles (cycling TCP session); the effective period is this interval plus the cycle duration."
         }
       },
       "protocol": {
@@ -165,14 +168,14 @@
           "debug_panel": "Show debug panel in sidebar"
         },
         "data_description": {
-          "host": "Hostname or IP address of the inverter, gateway, agent, or local bind interface for EyBond.",
+          "host": "Hostname or IP address of the inverter, gateway, agent, or local bind interface for EyBond. Prefer a DHCP reservation or a local hostname (e.g. inverter.local): the IP can then change without editing the integration.",
           "port": "TCP port. Defaults: 8899 for direct TCP/Modbus/EyBond, 8787 for the local agent.",
           "serial_device": "USB / RS232 device path. You can also type a path manually.",
           "agent_device_id": "providerDeviceId of the inverter exposed by solar-system-agent.",
           "eybond_devaddr": "RS485 slave address behind the EyBond dongle.",
           "eybond_broadcast": "UDP broadcast target used to announce the local server to the dongle.",
-          "eybond_announce_ip": "Optional IP address advertised to the dongle. Leave empty for auto-detect.",
-          "update_interval": "How often to poll the device. Lower values mean more frequent updates.",
+          "eybond_announce_ip": "Optional IP address advertised to the dongle. Leave empty for auto-detect: the local address is re-checked every 30 s, so a DHCP change on Home Assistant is picked up automatically. Set the host LAN IP in Docker bridge mode.",
+          "update_interval": "Base polling interval. Minimum 5 s with an EyBond dongle (cycling TCP session), 1 s for other transports. The effective period is this interval plus the cycle duration.",
           "strict_crc": "Drop Voltronic/PI18 frames with invalid CRC instead of trying to decode them."
         }
       },
@@ -433,6 +436,9 @@
       },
       "direct_vsoc_last_sync": {
         "name": "Last Full Charge Sync"
+      },
+      "direct_last_sample": {
+        "name": "Last live sample"
       },
       "discovered_dongles": {
         "name": "Discovered dongles"
