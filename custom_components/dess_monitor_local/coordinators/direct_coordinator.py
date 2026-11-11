@@ -36,6 +36,14 @@ from custom_components.dess_monitor_local.coordinators.rejection import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _qpiri_values_match(fetched, expected) -> bool:
+    """Compare a polled QPIRI value with an optimistic write value."""
+    try:
+        return abs(float(fetched) - float(expected)) < 0.01
+    except (TypeError, ValueError):
+        return str(fetched) == str(expected)
+
+
 class DirectCoordinator(DataUpdateCoordinator):
     """My custom coordinator."""
     devices = []
@@ -76,6 +84,11 @@ class DirectCoordinator(DataUpdateCoordinator):
     # stuck past this (its dongle gone for the whole poll) freezes on last-known
     # rather than dragging every entity's update behind it.
     _PER_DEVICE_POLL_TIMEOUT = 25.0
+    # Keep an optimistic QPIRI write visible until a fresh read confirms it.
+    # A poll that was already in flight when the write landed can still
+    # return the old register value; publishing that would shrink the
+    # register-333 select back before the caller can use the new options.
+    _QPIRI_OVERRIDE_TTL_S = 60.0
 
     def __init__(self, hass: HomeAssistant, config_entry, targets=None):
         """Initialize my coordinator.
@@ -110,6 +123,8 @@ class DirectCoordinator(DataUpdateCoordinator):
         # normal cadence says otherwise (used by the select entities after
         # a write so the optimistic value is confirmed immediately).
         self._forced_sections: set[str] = set()
+        # Optimistic QPIRI writes: {device_id: {data_key: (value, expires)}}
+        self._pending_qpiri: dict[str, dict[str, tuple[str, float]]] = {}
         self._cmd_by_section = {
             section: cmd for cmd, section, _ in self._CMD_SCHEDULE
         }
@@ -157,6 +172,58 @@ class DirectCoordinator(DataUpdateCoordinator):
         confirm the new value.
         """
         self._forced_sections.add(section)
+
+    def update_cached_qpiri(self, device_id: str, **values) -> None:
+        """Patch cached QPIRI values after a successful write.
+
+        Dependent entities recompute from this cache: the register-333
+        select's options are capped by register 332, and register 332's
+        minimum is register 333. Without the patch they keep the stale
+        coupling until the next QPIRI poll (up to 12 cycles away), which
+        made a 332 write followed by a 333 write fail with "Option 80 is
+        not valid". The override is kept until a fresh QPIRI read matches
+        it, because a poll already in flight when the write lands can still
+        return the old value.
+        """
+        now = time.monotonic()
+        pending = self._pending_qpiri.setdefault(device_id, {})
+        for key, value in values.items():
+            pending[key] = (str(value), now + self._QPIRI_OVERRIDE_TTL_S)
+
+        data = self.data
+        patched = False
+        if data:
+            device = data.get(device_id)
+            if isinstance(device, dict):
+                qpiri = device.get("qpiri")
+                if isinstance(qpiri, dict):
+                    qpiri.update(
+                        {key: str(value) for key, value in values.items()}
+                    )
+                    patched = True
+        if patched:
+            self.async_update_listeners()
+
+    def _apply_qpiri_overrides(self, device_id: str, qpiri: dict) -> None:
+        """Keep optimistic writes in front of a stale fresh poll.
+
+        Called on every successfully read QPIRI section. A value that now
+        matches is confirmed and dropped; a different one is kept only
+        until its TTL, so a failed write eventually shows the real value.
+        """
+        pending = self._pending_qpiri.get(device_id)
+        if not pending:
+            return
+        now = time.monotonic()
+        for key, (value, expires) in list(pending.items()):
+            if now >= expires:
+                pending.pop(key, None)
+            elif _qpiri_values_match(qpiri.get(key), value):
+                pending.pop(key, None)
+            else:
+                qpiri[key] = value
+        if not pending:
+            self._pending_qpiri.pop(device_id, None)
 
     def section_failures(self, device_id: str, section: str) -> int:
         """Consecutive failures for the command that feeds *section*."""
@@ -246,6 +313,8 @@ class DirectCoordinator(DataUpdateCoordinator):
                         return {}
                     else:
                         self._failures.on_success(key, cmd)
+                        if section == "qpiri" and isinstance(result, dict):
+                            self._apply_qpiri_overrides(key, result)
                         return result
                 if attempt == 0:
                     await asyncio.sleep(self._RETRY_DELAY_S)

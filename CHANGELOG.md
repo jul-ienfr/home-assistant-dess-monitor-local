@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.4 — 2026-11-11
+
+### Fixed
+
+- **The register-333 select now refreshes its options as soon as register
+  332 changes, and register 332 exposes the new minimum as soon as register
+  333 changes.** The two settings are coupled (the mains current cannot
+  exceed the total current, and the total cannot be set below the mains
+  current), but the entities only recomputed that coupling on the next
+  full QPIRI poll — up to two minutes. A write sequence such as
+  `332=100` then `333=80` could fail with
+  `Option 80 is not valid ... valid options are: 2, 10, 20`. The
+  coordinator now keeps an optimistic override of the written QPIRI value
+  until a fresh poll confirms it, so the options update immediately even
+  when a poll started before the write is still in flight.
+
+### Notes
+
+- No entity or service change; existing automations keep working
+  unchanged.
+- Restart Home Assistant after installing this release so the coordinator
+  code is reloaded.
+
 ## 1.1.0-beta.4-anenji.3 — 2026-11-10
 
 ### Changed

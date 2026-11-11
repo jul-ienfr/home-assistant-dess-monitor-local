@@ -564,5 +564,11 @@ class SMG2ConfigNumber(NumberBase):
             return
         self._pending_value = value
         self.async_write_ha_state()
+        # Keep the cached QPIRI in sync immediately: register 332 caps the
+        # register-333 options, and other settings expose bounds derived from
+        # the section. The forced refresh below still confirms the value.
+        self.coordinator.update_cached_qpiri(
+            self._inverter_device.inverter_id, **{self._data_key: value}
+        )
         self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()

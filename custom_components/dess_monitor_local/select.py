@@ -714,6 +714,13 @@ class InverterMaxUtilityChargingCurrentNumber(SelectBase):
                 return
             self._attr_current_option = option
             self.async_write_ha_state()
+            # Register 333 is the lower bound of register 332: patch the
+            # cached QPIRI so the number entity exposes the new minimum
+            # immediately instead of after the next full poll.
+            self.coordinator.update_cached_qpiri(
+                self._inverter_device.inverter_id,
+                max_utility_charging_current=option,
+            )
             self.coordinator.force_section("qpiri")
         await self.coordinator.async_request_refresh()
 
