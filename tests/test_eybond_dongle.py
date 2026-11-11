@@ -136,6 +136,42 @@ class TestResolveBroadcast:
         assert ey._resolve_broadcast_for_announce_ip("127.0.0.1") == ey.DEFAULT_BROADCAST
 
 
+class TestResolveAnnounceTarget:
+    def test_explicit_announce_ip_wins_even_off_interface(self):
+        # Docker bridge: the host LAN IP is not assigned to the container,
+        # so it must not be replaced by auto-detection.
+        with patch.object(
+            ey, "_resolve_broadcast_for_announce_ip", return_value="192.168.68.255"
+        ):
+            ip, broadcast = ey.resolve_announce_target(
+                "0.0.0.0", "192.168.68.60", ey.DEFAULT_BROADCAST
+            )
+        assert ip == "192.168.68.60"
+        assert broadcast == "192.168.68.255"
+
+    def test_concrete_bind_host_is_used_without_detection(self):
+        with patch.object(ey, "_detect_local_ip") as detect:
+            ip, broadcast = ey.resolve_announce_target(
+                "192.168.1.10", None, "192.168.1.255"
+            )
+        assert ip == "192.168.1.10"
+        assert broadcast == "192.168.1.255"
+        detect.assert_not_called()
+
+    def test_wildcard_bind_autodetects_and_resolves_broadcast(self):
+        with (
+            patch.object(ey, "_detect_local_ip", return_value="10.0.0.42"),
+            patch.object(
+                ey, "_resolve_broadcast_for_announce_ip", return_value="10.0.0.255"
+            ) as resolve,
+        ):
+            ip, broadcast = ey.resolve_announce_target(
+                "0.0.0.0", None, ey.DEFAULT_BROADCAST
+            )
+        assert (ip, broadcast) == ("10.0.0.42", "10.0.0.255")
+        resolve.assert_called_once_with("10.0.0.42")
+
+
 # ---------------------------------------------------------------------------
 # Multi-session manager — in-memory fakes (no real socket)
 # ---------------------------------------------------------------------------

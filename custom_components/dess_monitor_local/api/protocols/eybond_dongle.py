@@ -90,6 +90,12 @@ ANNOUNCE_INTERVAL = 5.0
 # short (vs the 5s send cadence) so it catches the brief window where all
 # expected dongles are connected and pauses before knocking them offline.
 ANNOUNCE_CHECK_INTERVAL = 1.0
+# Re-detect the local IPv4 address while announcing. Home Assistant can get a
+# new DHCP lease while the listener keeps running; caching the address once at
+# startup leaves the dongles pointed at an IP that no longer exists, so they
+# never reconnect after the next drop. Explicit ``announce_ip`` overrides are
+# never re-detected (they may be a host IP in Docker bridge mode).
+ANNOUNCE_IP_REFRESH = 30.0
 # Duration of a user-triggered "scan for new dongles" — the announcer
 # broadcasts regardless of connection state for this window so brand-new
 # dongles receive ``set>server`` and attach. Briefly flaps connected dongles
@@ -328,6 +334,31 @@ def _resolve_broadcast_for_announce_ip(announce_ip: str) -> str:
         pass
 
     return DEFAULT_BROADCAST
+
+
+def resolve_announce_target(
+    bind_host: str,
+    announce_ip: str | None,
+    broadcast: str,
+) -> tuple[str, str]:
+    """Return the ``(ip, broadcast)`` to put in the next ``set>server``.
+
+    Explicit ``announce_ip`` wins (Docker bridge mode needs the host LAN IP,
+    which is not a local interface). Otherwise a concrete bind address is
+    used as-is, and ``0.0.0.0`` triggers local-IP detection. A default
+    broadcast is resolved from the resulting IP so a DHCP change that moves
+    Home Assistant to another subnet also moves the UDP target.
+    """
+    if announce_ip:
+        ip = announce_ip
+    elif bind_host not in ("0.0.0.0", "", None):
+        ip = bind_host
+    else:
+        ip = _detect_local_ip()
+
+    if not broadcast or broadcast == DEFAULT_BROADCAST:
+        broadcast = _resolve_broadcast_for_announce_ip(ip)
+    return ip, broadcast
 
 
 # ---------------------------------------------------------------------------
@@ -607,35 +638,32 @@ class EybondManager:
         )
 
     async def _announce_loop(self) -> None:
+        auto_broadcast = self.broadcast in ("", None, DEFAULT_BROADCAST)
+        announce_ip, broadcast = resolve_announce_target(
+            self.bind_host, self.announce_ip, self.broadcast
+        )
         if self.announce_ip:
-            announce_ip = self.announce_ip
             _LOGGER.debug(
                 "EyBond: using configured announce IP %s", announce_ip
             )
         else:
-            announce_ip = self.bind_host
-            if announce_ip in ("0.0.0.0", "", None):
-                announce_ip = _detect_local_ip()
-                _LOGGER.debug(
-                    "EyBond: auto-detected announce IP %s — set "
-                    "eybond_announce_ip explicitly if this is wrong (e.g. "
-                    "Docker bridge networking returns container IP, not host)",
-                    announce_ip,
-                )
-
-        if self.broadcast == "255.255.255.255" or self.broadcast == DEFAULT_BROADCAST:
-            resolved = _resolve_broadcast_for_announce_ip(announce_ip)
-            if resolved and resolved != "255.255.255.255":
-                _LOGGER.info(
-                    "EyBond: broadcast resolved: announce=%s broadcast=%s",
-                    announce_ip, resolved,
-                )
-                self.broadcast = resolved
+            _LOGGER.debug(
+                "EyBond: auto-detected announce IP %s — set "
+                "eybond_announce_ip explicitly if this is wrong (e.g. "
+                "Docker bridge networking returns container IP, not host)",
+                announce_ip,
+            )
+        if broadcast != self.broadcast:
+            _LOGGER.info(
+                "EyBond: broadcast resolved: announce=%s broadcast=%s",
+                announce_ip, broadcast,
+            )
+            self.broadcast = broadcast
 
         payload = f"set>server={announce_ip}:{self.bind_port};".encode("ascii")
         _LOGGER.info(
             "EyBond: UDP announcer START -> %s:%d every %.1fs, payload=%r",
-            self.broadcast, UDP_PORT, ANNOUNCE_INTERVAL, payload.decode(),
+            broadcast, UDP_PORT, ANNOUNCE_INTERVAL, payload.decode(),
         )
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -645,28 +673,60 @@ class EybondManager:
         # where all dongles are simultaneously connected and stop knocking them
         # offline) but rate-limit the actual broadcast to ANNOUNCE_INTERVAL.
         last_send = 0.0
+        last_ip_refresh = loop.time()
         was_paused = False
         try:
             while True:
+                now = loop.time()
+                # A DHCP lease change gives Home Assistant a new address while
+                # this task keeps running. Re-resolve periodically so the next
+                # set>server carries the current IP (and subnet broadcast).
+                if (
+                    not self.announce_ip
+                    and now - last_ip_refresh >= ANNOUNCE_IP_REFRESH
+                ):
+                    last_ip_refresh = now
+                    new_ip, new_broadcast = resolve_announce_target(
+                        self.bind_host,
+                        None,
+                        DEFAULT_BROADCAST if auto_broadcast else self.broadcast,
+                    )
+                    if new_ip != announce_ip:
+                        _LOGGER.warning(
+                            "EyBond: local IP changed %s -> %s; refreshing "
+                            "set>server payload",
+                            announce_ip, new_ip,
+                        )
+                        announce_ip = new_ip
+                        payload = (
+                            f"set>server={announce_ip}:{self.bind_port};"
+                        ).encode("ascii")
+                    if new_broadcast != broadcast:
+                        _LOGGER.info(
+                            "EyBond: broadcast updated: announce=%s broadcast=%s",
+                            announce_ip, new_broadcast,
+                        )
+                        broadcast = new_broadcast
+                        self.broadcast = broadcast
+
                 if self._should_announce():
                     if was_paused:
                         _LOGGER.debug(
                             "EyBond: announce RESUMED — expected dongle missing"
                         )
                     was_paused = False
-                    now = loop.time()
                     if now - last_send >= ANNOUNCE_INTERVAL:
                         last_send = now
                         try:
-                            sock.sendto(payload, (self.broadcast, UDP_PORT))
+                            sock.sendto(payload, (broadcast, UDP_PORT))
                             _LOGGER.debug(
                                 "EyBond: UDP -> %s:%d %r",
-                                self.broadcast, UDP_PORT, payload.decode(),
+                                broadcast, UDP_PORT, payload.decode(),
                             )
                         except OSError as err:
                             _LOGGER.warning(
                                 "EyBond: UDP send failed (target %s:%d): %s",
-                                self.broadcast, UDP_PORT, err,
+                                broadcast, UDP_PORT, err,
                             )
                 elif not was_paused:
                     # Don't keep knocking connected dongles offline.
