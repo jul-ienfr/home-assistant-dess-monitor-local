@@ -332,11 +332,17 @@ class TestSnapshotCache:
 
         modadapter._clear_snapshot_cache()
         uri = "eybond-modbus://0.0.0.0:8899/1?pn=PN_SLOW"
+
+        async def exercise_cycle():
+            # Keep the six commands in one loop: a fresh event loop between
+            # them can exceed the deliberately tiny TTL on a busy machine.
+            for cmd in ("QPIGS", "QPIRI", "QMOD", "QPIGS2", "QPIWS", "QFWS"):
+                await modadapter.ModbusAdapter(uri).get_data(cmd)
+
         with patch.object(modadapter, "_SNAPSHOT_TTL", 0.01), patch.object(
             modadapter, "read_smg2_snapshot_via", side_effect=slow_snapshot
         ):
-            for cmd in ("QPIGS", "QPIRI", "QMOD", "QPIGS2", "QPIWS", "QFWS"):
-                asyncio.run(modadapter.ModbusAdapter(uri).get_data(cmd))
+            asyncio.run(exercise_cycle())
         assert calls["n"] == 1
 
     def test_distinct_uris_cache_independently(self):
