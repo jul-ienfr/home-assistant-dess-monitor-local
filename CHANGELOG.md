@@ -23,11 +23,13 @@
 
 - **The EyBond announcer no longer caches Home Assistant's IP forever.**
   When `Announce IP` is left empty, the local address is re-checked every
-  30 s while the listener runs. If a DHCP lease change moves Home
-  Assistant to a new address (and subnet), the next `set>server` payload
-  and UDP broadcast target are updated automatically, so dongles can
-  reconnect without a Home Assistant restart. An explicit announce IP is
-  still used verbatim for Docker bridge setups.
+  30 s while a dongle is missing; the first broadcast after a longer pause
+  re-checks immediately. If a DHCP lease change moves Home Assistant to a new address
+  (and subnet), the next `set>server` payload and UDP broadcast target are
+  updated automatically, so dongles can reconnect without a Home
+  Assistant restart. Nothing is checked while every dongle is connected:
+  a healthy system is left alone. An explicit announce IP is still used
+  verbatim for Docker bridge setups.
 - **Energy accumulators no longer bridge a data outage.** A trapezoidal
   step is skipped when the source section is stale (for example QPIGS
   failed while QPIRI was read) or when the elapsed gap exceeds

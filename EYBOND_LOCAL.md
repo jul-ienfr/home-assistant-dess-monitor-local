@@ -279,9 +279,11 @@ redémarrer Home Assistant.
 | Announce IP | *(vide — détection automatique)* |
 | Intervalle de mise à jour | `10` s |
 
-Sur HAOS ou une installation native, laisser `Announce IP` **vide** :
-l'intégration revérifie l'adresse locale toutes les 30 s et met à jour le
-`set>server` (ainsi que le broadcast du sous-réseau) si le bail DHCP change.
+Sur HAOS ou une installation native, laisser `Announce IP` **vide** : tant
+qu'un dongle manque, l'intégration revérifie l'adresse locale toutes les 30 s
+(la première annonce après une longue pause la revérifie immédiatement) et met à jour le `set>server`
+(ainsi que le broadcast du sous-réseau) si le bail DHCP change. Aucune
+vérification n'a lieu quand tous les dongles sont connectés.
 Renseigner une IP explicite uniquement en Docker bridge, où l'IP LAN de l'hôte
 n'est pas une interface locale ; dans ce cas il faut la mettre à jour
 manuellement si elle change. Le broadcast `192.168.71.255` correspond au
@@ -319,7 +321,8 @@ Rien à configurer côté routeur. Le dongle ouvre une connexion sortante vers
 l'adresse courante de Home Assistant sur le port 8899. Il suffit que le
 pare-feu de l'hôte accepte le TCP 8899 en entrée depuis le réseau local. En
 mode `Announce IP` automatique, un changement d'adresse de Home Assistant est
-re-annoncé sous 30 s.
+pris en compte immédiatement si la pause a duré plus de 30 s, sinon au plus
+tard dans les 30 s d'une annonce active.
 
 ### 6.2 Home Assistant en Docker
 

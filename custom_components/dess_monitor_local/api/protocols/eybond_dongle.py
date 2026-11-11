@@ -678,11 +678,17 @@ class EybondManager:
         try:
             while True:
                 now = loop.time()
-                # A DHCP lease change gives Home Assistant a new address while
-                # this task keeps running. Re-resolve periodically so the next
-                # set>server carries the current IP (and subnet broadcast).
+                should_announce = self._should_announce()
+
+                # Only touch the network configuration while a dongle is
+                # actually missing. When every expected dongle is connected,
+                # the announcer is paused and this loop does no detection at
+                # all — a working system is left alone. If the pause lasted
+                # longer than the refresh period, the first broadcast after
+                # resume re-resolves the address immediately.
                 if (
                     not self.announce_ip
+                    and should_announce
                     and now - last_ip_refresh >= ANNOUNCE_IP_REFRESH
                 ):
                     last_ip_refresh = now
@@ -709,7 +715,7 @@ class EybondManager:
                         broadcast = new_broadcast
                         self.broadcast = broadcast
 
-                if self._should_announce():
+                if should_announce:
                     if was_paused:
                         _LOGGER.debug(
                             "EyBond: announce RESUMED — expected dongle missing"

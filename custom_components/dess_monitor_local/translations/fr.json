@@ -42,7 +42,7 @@
           "host": "Interface locale sur laquelle ouvrir l'écouteur TCP (généralement 0.0.0.0).",
           "port": "Port TCP sur lequel les dongles se reconnectent (8899 par défaut).",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local aux dongles.",
-          "eybond_announce_ip": "IP annoncée aux dongles. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "eybond_announce_ip": "IP annoncée aux dongles. Laissez vide pour la détection automatique : tant qu'un dongle manque, l'adresse locale est revérifiée toutes les 30 s (la première annonce après une longue pause la revérifie immédiatement), donc un changement DHCP de Home Assistant est pris en compte automatiquement. Aucune vérification n'a lieu quand tous les dongles sont connectés. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
           "update_interval": "Intervalle d'interrogation de base pour chaque onduleur enfant activé. Minimum 5 s avec les dongles EyBond (session TCP cyclique) ; la période réelle est cet intervalle plus la durée du cycle."
         }
       },
@@ -81,7 +81,7 @@
           "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
           "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
-          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : tant que le dongle manque, l'adresse locale est revérifiée toutes les 30 s (la première annonce après une longue pause la revérifie immédiatement), donc un changement DHCP de Home Assistant est pris en compte automatiquement. Aucune vérification n'a lieu quand le dongle est connecté. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
           "update_interval": "Intervalle d'interrogation de base. Minimum 5 s avec un dongle EyBond (session TCP cyclique), 1 s pour les autres transports. La période réelle est cet intervalle plus la durée du cycle.",
           "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
         }
@@ -174,7 +174,7 @@
           "agent_device_id": "providerDeviceId de l'onduleur exposé par solar-system-agent.",
           "eybond_devaddr": "Adresse esclave RS485 derrière le dongle EyBond.",
           "eybond_broadcast": "Cible de diffusion UDP utilisée pour annoncer le serveur local au dongle.",
-          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : l'adresse locale est revérifiée toutes les 30 s, donc un changement DHCP de Home Assistant est pris en compte automatiquement. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
+          "eybond_announce_ip": "Adresse IP facultative annoncée au dongle. Laissez vide pour la détection automatique : tant que le dongle manque, l'adresse locale est revérifiée toutes les 30 s (la première annonce après une longue pause la revérifie immédiatement), donc un changement DHCP de Home Assistant est pris en compte automatiquement. Aucune vérification n'a lieu quand le dongle est connecté. Indiquez l'IP LAN de l'hôte en mode bridge Docker.",
           "update_interval": "Intervalle d'interrogation de base. Minimum 5 s avec un dongle EyBond (session TCP cyclique), 1 s pour les autres transports. La période réelle est cet intervalle plus la durée du cycle.",
           "strict_crc": "Rejeter les trames Voltronic/PI18 dont le CRC est invalide au lieu de tenter de les décoder."
         }

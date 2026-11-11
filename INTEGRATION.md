@@ -206,10 +206,13 @@ For a single SMG-II behind an EyBond dongle, choose protocol `modbus`,
 transport `eybond`, bind `0.0.0.0:8899`, and the RS485 address (usually `1`).
 The wizard creates the `eybond-modbus://` URI automatically. The `devaddr`
 is the Modbus unit ID. Set the broadcast address of the dongle's subnet. Leave
-**Announce IP** empty on HAOS/native installations: the local address is
-re-checked every 30 s, so a DHCP change is picked up without a restart. Set it
-explicitly only in Docker bridge mode, where the host LAN IP is not a local
-interface (and update it yourself if that host IP changes).
+**Announce IP** empty on HAOS/native installations: while a dongle is missing,
+the local address is re-checked every 30 s (the first broadcast after a long
+pause re-checks immediately), so a DHCP change is picked up without a
+restart. Nothing is checked
+while every dongle is connected. Set it explicitly only in Docker bridge mode,
+where the host LAN IP is not a local interface (and update it yourself if that
+host IP changes).
 
 For a direct TCP/Modbus/PI18 inverter, prefer a **DHCP reservation or a local
 hostname** (e.g. `inverter.local`) over a raw IP. If the address changes
