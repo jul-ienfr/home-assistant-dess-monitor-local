@@ -1,250 +1,155 @@
-# Anenji ESPHome — Onduleur Van Master
+# DESS Monitor Local — Anenji / SMG-II
 
-> **Dépôt** : ce projet est hébergé sur
-> [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local).
-> La branche `main` contient à la fois le firmware ESPHome décrit ici et
-> l'intégration **DESS Monitor Local** pour le Marketplace (ex-HACS) :
-> `hacs.json`, `custom_components/dess_monitor_local/`, documentation dans
-> [`INTEGRATION.md`](INTEGRATION.md). Format Marketplace et publication :
-> [MARKETPLACE.md](MARKETPLACE.md).
+Intégration Home Assistant **100 % locale** pour les onduleurs Anenji, EASUN et
+ISolar SMG-II, ainsi que les appareils compatibles PI30 (Voltronic/Axpert),
+PI18 (InfiniSolar-V) et Modbus RTU.
 
-Firmware ESPHome pour surveiller et piloter un onduleur solaire hybride
-**Anenji / EASUN / ISolar SMG-II** (4,2 kW / 6,2 kW) via Modbus RTU, depuis Home
-Assistant ou en autonomie.
+Elle interroge directement l'onduleur, ou réutilise le dongle Wi-Fi d'origine
+(Eybond / SmartESS) : pas de cloud, pas d'ESP32, pas de passerelle
+supplémentaire.
 
-> **État** : configuration validée avec ESPHome 2025.12.2 (`esphome config` et
-> `esphome compile`). Le test ESP32 sur onduleur réel reste à effectuer avec la
-> checklist [`quickstart.md`](specs/001-anenji-functional/quickstart.md). La
-> voie **dongle Wi-Fi Eybond** est en revanche validée sur le matériel
-> (lecture des registres et écriture FC16) : voir
-> [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
-
-## Sommaire
-
-- [Matériel](#matériel)
-- [Fonctionnalités](#fonctionnalités)
-- [Démarrage rapide](#démarrage-rapide)
-- [Sans ESP32](#sans-esp32)
-- [Contrôle via le dongle Wi-Fi Eybond](EYBOND_LOCAL.md)
-- [Carte des registres](#carte-des-registres)
-- [Sécurité](#sécurité)
-- [Variantes et limites](#variantes-et-limites)
-- [Structure du dépôt](#structure-du-dépôt)
-- [Dépannage](#dépannage)
-- [Sources](#sources)
-
-## Matériel
-
-| Composant | Description | Prix estimé |
-|-----------|-------------|-------------|
-| ESP32dev | Carte ESP32-WROOM, 4 Mo | 5-8 € |
-| MAX485 / SP3485 | Transceiver RS485 (si le port onduleur est RS485) | 1-3 € |
-| MAX3232 | Transceiver RS232 (si le port onduleur est RS232/RJ45) | 1-3 € |
-| Câble torsadé | 2 fils, 0,5 mm² minimum | 2-5 € |
-| Alimentation 5 V | USB ou buck 12 V → 5 V, 1 A | 3-5 € |
-
-**Total : ~12-24 €**
-
-Le choix du transceiver dépend du port de l'onduleur. Voir
-[WIRING.md](WIRING.md) pour les deux schémas, les niveaux 3,3 V/5 V et la gestion
-DE/RE.
+> **Dépôt** :
+> [jul-ienfr/home-assistant-dess-monitor-local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
+> **Documentation complète** : [`INTEGRATION.md`](INTEGRATION.md)
+> **Installation et publication** : [`MARKETPLACE.md`](MARKETPLACE.md)
 
 ## Fonctionnalités
 
-### Mesures (lecture seule)
+- **Télémétrie complète** : entrée AC, sortie onduleur, batterie, PV,
+  températures, charge, énergie et autonomie.
+- **Pilotage depuis Home Assistant** : priorités de sortie et de charge,
+  tensions et courants de charge, seuils SOC, buzzer, rétroéclairage, mode de
+  sortie, égalisation, sortie distante et sortie d'état défaut.
+- **Défauts et avertissements décodés** : code 32 bits, libellés et conseils
+  d'action, en français ou en anglais selon la langue de Home Assistant.
+- **Énergie fiable** : intégration trapézoïdale qui s'arrête pendant une
+  interruption de données au lieu de compter une énergie jamais produite.
+- **vSoC optionnel** : estimation du SOC batterie par comptage de coulombs,
+  indépendante de la tension sous charge.
+- **Dongle EyBond** : un seul écouteur TCP pour plusieurs dongles, découverte
+  par PN, protocole et transport configurables par onduleur.
+- **Identité stable** : changer l'IP ou le nom d'hôte de l'onduleur dans les
+  options conserve les entités, l'appareil et l'historique.
+- **Diagnostic intégré** : dernier échantillon live, âge de la donnée,
+  compteurs d'échec par section, `stale` / `stale_cycles`, intervalles
+  configuré et effectif.
+- **Noms français et anglais** fournis ; toute autre langue retombe sur
+  l'anglais.
 
-| Entité | Unité | Registre |
-|--------|-------|---------:|
-| AC Input Voltage / Frequency / Power | V / Hz / W | 202-204 |
-| Inverter Voltage / Current / Frequency / Power | V / A / Hz / W | 205-208 |
-| AC Output Voltage / Current / Frequency / Active Power | V / A / Hz / W | 210-213 |
-| AC Output Apparent Power | VA | 214 |
-| Battery Voltage / Current / Power / SOC | V / A / W / % | 215-217, 229 |
-| PV Voltage / Current / Power / Charging Power | V / A / W | 219-224 |
-| Load | % | 225 |
-| DCDC / Inverter Temperature | °C | 226-227 |
-| PV Energy Today | kWh | dérivé de 223 |
-| Charging / Discharging Power | W | dérivé de 217 |
-| Battery Autonomy | min | dérivé de 217, 229 et capacité |
+## Protocoles et transports
 
-### Commandes
+| Protocole | Appareils | Transports |
+| --- | --- | --- |
+| `voltronic` | Voltronic / Axpert PI30 | `tcp_elfin`, `serial`, `eybond` |
+| `pi18` | PI18 / InfiniSolar-V | `tcp`, `serial` |
+| `modbus` | Modbus RTU, SMG-II | `tcp`, `eybond` |
+| `agent` | API HTTP locale `solar-system-agent` | `agent_http` |
 
-- **Select** : mode de sortie (Single uniquement), priorité de sortie, plage
-  d'entrée, buzzer, rétroéclairage, tension et fréquence de sortie, priorité de
-  charge, mode de démarrage, type de batterie.
-- **Switch** : LCD auto home, économie d'énergie, redémarrage sur surcharge ou
-  surchauffe, transfert bypass, égalisation, sortie distante.
-- **Number** : tensions de charge/décharge, OVP, courants max, paramètres
-  d'égalisation, seuils SOC (retour réseau, retour batterie, coupure basse).
-- **Button** : sortie de l'état défaut (registre 426).
+L'intervalle de mise à jour est réglable de 1 à 300 s. Les dongles EyBond ont un
+minimum de **5 s** : ils renouvellent leur session TCP toutes les quelques
+secondes, et un poll plus rapide tombe surtout dans les trous de connexion.
 
-### Diagnostic
+## Installation
 
-- Mode de fonctionnement lisible (registre 201).
-- Code de défaut et code d'avertissement bruts (32 bits) + libellés.
-- Statut Modbus, compteur d'erreurs, uptime, signal WiFi, appareil en ligne.
-- `Configuration Incoherent` : détecte les combinaisons dangereuses entre OVP,
-  tensions de charge, seuils SOC et courants max.
-- `safe_mode` avec retour arrière après 5 échecs de démarrage.
+### Marketplace (Home Assistant 2026.11+)
 
-### Énergie et autonomie
+1. **Paramètres → Marketplace**.
+2. **Add from link** et coller
+   `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`.
+3. Choisir **Integration**, puis **Install**.
+4. Sélectionner la dernière release publiée (activer les préversions pour la
+   ligne beta), puis redémarrer Home Assistant si demandé.
+5. Ajouter l'intégration dans **Paramètres → Appareils et services**.
 
-- CPU à 160 MHz par défaut (80 MHz possible), WiFi à 8,5 dB, power save LIGHT.
-- Mode debug réglable depuis Home Assistant (5 s au lieu de 10 s).
-- Aucun redémarrage automatique si Home Assistant est absent
-  (`api.reboot_timeout: 0s`).
+### HACS avant Home Assistant 2026.11
+
+Ajouter le dépôt comme **Integration** dans les dépôts personnalisés, installer
+**DESS Monitor Local**, puis redémarrer Home Assistant.
+
+### Manuel
+
+Copier `custom_components/dess_monitor_local` dans le dossier
+`config/custom_components/` de Home Assistant et redémarrer. Le Marketplace est
+préférable : il gère les mises à jour et la dépendance
+`pyserial-asyncio-fast`.
+
+Home Assistant **2024.6.0** ou plus récent est requis.
 
 ## Démarrage rapide
 
-```powershell
-# 1. Cloner le dépôt
-git clone https://github.com/jul-ienfr/home-assistant-dess-monitor-local.git
-cd home-assistant-dess-monitor-local
+### Dongle Wi-Fi EyBond / SmartESS
 
-# 2. Créer les secrets
-Copy-Item secrets.yaml.example secrets.yaml
-# Éditer secrets.yaml : WiFi, API, OTA, web
+1. Ajouter **DESS Monitor Local**, puis choisir **EyBond hub** (plusieurs
+   dongles) ou **Single inverter**.
+2. Protocole `modbus`, transport `eybond`, écoute `0.0.0.0:8899`, adresse RS485
+   `1`.
+3. Renseigner le broadcast du sous-réseau. Laisser **Announce IP** vide sur
+   HAOS ou une installation native ; l'adresse locale est revérifiée tant que
+   l'annonce est nécessaire. En Docker bridge, indiquer l'IP LAN de l'hôte.
+4. Vérifier que le TCP `8899` est joignable depuis le dongle.
 
-# 3. Valider et compiler
-esphome config anenji.yaml
-esphome compile anenji.yaml
+Procédure détaillée, schémas et dépannage : [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
 
-# 4. Flasher
-esphome run anenji.yaml
-```
+### Onduleur en TCP/Modbus direct
 
-> Si le projet est dans un dossier synchronisé (Nextcloud/OneDrive) et que la
-> compilation échoue sur `uv pip list`, copier le projet dans un dossier local
-> non synchronisé (par exemple `C:\Temp\anenji`) et compiler là.
+Choisir le protocole `modbus`, le transport `tcp`, puis l'hôte et le port de
+l'onduleur ou de la passerelle. Préférer un **bail DHCP réservé** ou un nom
+d'hôte local (par exemple `inverter.local`) à une IP brute : un changement
+d'adresse reste transparent.
 
-Procédure détaillée, checklist de vérification et adaptation 48 V :
-[`quickstart.md`](specs/001-anenji-functional/quickstart.md).
+### Port série
 
-## Sans ESP32
+Utiliser le transport `serial` uniquement si aucun autre maître n'interroge
+déjà le port Modbus de l'onduleur. Un seul maître à la fois sur le bus.
 
-Le firmware ESP32 n'est pas obligatoire pour lire ou piloter l'onduleur. Quatre
-voies existent :
+## Documentation
 
-1. **Dongle Wi-Fi d'origine (Eybond / SmartESS)** : le plus direct lorsque le
-   dongle est déjà installé. Il accepte une annonce UDP et ouvre une connexion
-   TCP inverse vers Home Assistant ; aucune passerelle supplémentaire n'est
-   nécessaire. Voie **validée sur le matériel du site** (lecture + écriture
-   FC16) : voir [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
-2. **Passerelle série → Ethernet** : elle remplace l'ESP32 sur le bus
-   RS232/RS485 et reste entièrement locale. C'est la voie la plus prévisible
-   pour les écritures.
-3. **Adaptateur USB-RS485/RS232** sur le serveur Home Assistant, si celui-ci
-   est proche de l'onduleur.
-4. **Cloud fabricant** (SmartESS/SolarMAN), sans matériel mais avec latence et
-   dépendance à Internet.
-
-L'intégration **DESS Monitor Local** s'installe depuis le Marketplace
-(`Paramètres → Marketplace`) et utilise le transport `eybond` du dongle. Ne
-pas la configurer en `serial`/`modbus` sur le port déjà interrogé par
-l'ESP32 : un seul maître Modbus à la fois. Voir
-[`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) et [`MARKETPLACE.md`](MARKETPLACE.md).
-
-Le dongle Wi-Fi d'origine n'expose pas Modbus TCP sur son IP (ports 502 et 8899
-fermés). Il peut néanmoins être détourné du cloud vers Home Assistant via son
-protocole Eybond. Tests de ports, configuration Home Assistant, limites
-d'écriture FC16 et sécurité : voir [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md) et
-[`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
-
-## Carte des registres
-
-La carte complète, avec types, échelles, sources et variantes non supportées, est
-dans [PROTOCOL.md](PROTOCOL.md) et dans le contrat
-[`contracts/register-map.md`](specs/001-anenji-functional/contracts/register-map.md).
-
-Points importants :
-
-- **Températures** : registres 226/227 déjà en °C, **sans facteur 0,1**.
-- **Batterie** : registre 217, positif = charge, négatif = décharge.
-- **Écritures** : fonction 16 (`use_write_multiple: true`) et `write_lambda` qui
-  retourne la valeur mise à l'échelle.
-- **Défauts** : registres 100/108 en `U_DWORD` (2 registres), décodés par bits.
-
-## Sécurité
-
-- `secrets.yaml` est ignoré par Git ; seul `secrets.yaml.example` est versionné.
-- API chiffrée et OTA protégé. Le serveur web est **désactivé par défaut** ; si
-  vous l'activez, utilisez l'authentification (snippet dans `anenji.yaml`).
-- Écritures bornées (`min_value` / `max_value`) et classées `config`.
-- Seuils batterie paramétrables ; ne pas flasher une configuration 24 V sur un
-  parc 48 V.
-- Avant toute écriture critique, noter les valeurs d'origine et tester un réglage
-  réversible.
-
-## Variantes et limites
-
-| Modèle | Support |
-|--------|---------|
-| Anenji / EASUN / ISolar SMG-II 4,2 kW | Oui (cible principale) |
-| Anenji ANJ-4000W / ANJ-4200W-24V-WIFI | Oui — modèle 24 V de la gamme 4,2 kW |
-| Anenji SMG-II 6,2 kW | Oui (mêmes registres, vérifier le port) |
-| Anenji 11 kW hybride | **Non** — carte différente (277+, 338, 351, 389) ; voir `PreK/esphome-anenji-11kw-native-modbus` |
-| SMG-II 6 kW variante USB-A | **Non** — carte et port différents ; voir `syssi/esphome-smg-ii` |
-| Axpert / Voltronic MKS | **Non** — registres 200/250-259, hors SMG-II |
-
-Les anciennes configurations de ce dépôt sont conservées dans `legacy/` et ne
-doivent pas être flashées telles quelles.
-
-> **Fonctionnement sans batterie** : la documentation commerciale Anenji indique
-> que l'ANJ-4000W/4200W-24V-WIFI peut alimenter la charge sans batterie
-> (PV + réseau). Dans ce mode, les entités de batterie (tension, SOC, autonomie)
-> ne sont pas significatives ; la lecture PV/réseau/sortie reste valable. Ne pas
-> y activer les automatismes de charge/décharge.
+| Document | Contenu |
+| --- | --- |
+| [`INTEGRATION.md`](INTEGRATION.md) | Documentation complète de l'intégration |
+| [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) | Dongle EyBond / SmartESS, NAT, Docker, VLAN |
+| [`PROTOCOL.md`](PROTOCOL.md) | Carte des registres Modbus SMG-II |
+| [`wiki/Configuration.md`](wiki/Configuration.md) | Toutes les options de configuration |
+| [`wiki/EyBond-Transport-Setup.md`](wiki/EyBond-Transport-Setup.md) | Assistant EyBond pas à pas |
+| [`wiki/Inverter-Faults-API.md`](wiki/Inverter-Faults-API.md) | Contrat des entités défauts/avertissements |
+| [`wiki/Inverter-Warnings-Card.md`](wiki/Inverter-Warnings-Card.md) | Carte Lovelace prête à coller |
+| [`wiki/vSoC-Setup.md`](wiki/vSoC-Setup.md) | Mise en place du vSoC |
+| [`MARKETPLACE.md`](MARKETPLACE.md) | Format Marketplace et publication |
+| [`CHANGELOG.md`](CHANGELOG.md) | Historique des versions |
 
 ## Structure du dépôt
 
 ```text
-anenji.yaml                  # configuration principale ESPHome
-secrets.yaml.example         # modèle de secrets
-README.md                    # ce fichier (firmware ESPHome)
-INTEGRATION.md               # documentation de l'intégration DESS Monitor Local
-hacs.json                    # métadonnées Marketplace
-custom_components/           # intégration DESS Monitor Local
-tests/                       # tests de l'intégration
-wiki/                        # documentation de l'intégration
-WIRING.md                    # câblage RS232 / RS485
-PROTOCOL.md                  # carte de registres SMG-II
-REMOTE_ACCESS.md             # contrôle sans ESP32 (comparaison des voies)
-EYBOND_LOCAL.md              # contrôle via le dongle Wi-Fi d'origine
-MARKETPLACE.md               # format Marketplace (ex-HACS) et publication
-tools/                       # diagnostic et audit Eybond (lecture + écritures sûres)
-patches/                     # correctif optionnel pour DESS Monitor Local beta.3
-legacy/                      # anciennes configurations (avertissement)
-specs/001-anenji-functional/ # spécification, plan, recherche, contrat, quickstart
-.specify/                    # infrastructure SpecKit
+hacs.json                     # métadonnées Marketplace
+custom_components/dess_monitor_local/
+                              # intégration Home Assistant
+tests/                        # tests unitaires et tests Home Assistant
+wiki/                         # documentation utilisateur
+tools/                        # diagnostic Eybond (lecture et audit)
+INTEGRATION.md                # documentation complète
+EYBOND_LOCAL.md               # transport Eybond
+PROTOCOL.md                   # carte des registres
+MARKETPLACE.md                # publication
+CHANGELOG.md                  # versions
 ```
 
-## Dépannage
+Le firmware ESPHome, le câblage ESP32 et les configurations matérielles
+historiques ne font plus partie de ce dépôt. L'intégration Home Assistant est
+le seul produit maintenu ici.
 
-| Symptôme | Cause probable | Action |
-|----------|----------------|--------|
-| `Modbus Status: Error` | A/B inversés, GND absent, DE/RE non câblé | Vérifier le câblage, inverser A/B, relier DE+/RE à GPIO4 |
-| Aucune trame | Mauvaise adresse ou débit | Vérifier `0x01` et 9600 8N1 |
-| Température à 3,2 °C | Ancienne configuration | Utiliser `anenji.yaml` |
-| Écriture sans effet | FC06 au lieu de FC16 | Vérifier `use_write_multiple: true` |
-| Port 502 du dongle fermé | Le dongle n'est pas un serveur Modbus | Utiliser [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md) |
-| Valeurs d'un 11 kW incohérentes | Carte de registres différente | Utiliser un projet 11 kW |
-| Compilation impossible | Dossier synchronisé | Compiler dans `C:\Temp\anenji` |
+## Développement
 
-## Sources
+```bash
+python -m pytest -q
+ruff check custom_components/dess_monitor_local tests
+```
 
-- [syssi/esphome-smg-ii](https://github.com/syssi/esphome-smg-ii)
-- [jul-ienfr/esphome-anenji-4.2kw-wifi](https://github.com/jul-ienfr/esphome-anenji-4.2kw-wifi)
-  — fork historique, dérivé de syssi ; **non utilisé comme source de vérité**.
-- [janas-karol/esphome-anenji-6.2kw](https://github.com/janas-karol/esphome-anenji-6.2kw)
-- [PreK/esphome-anenji-11kw-native-modbus](https://github.com/PreK/esphome-anenji-11kw-native-modbus)
-- [attilagyurman/anenji-local-modbus](https://github.com/attilagyurman/anenji-local-modbus)
-- [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
-  — intégration Home Assistant pour le transport Eybond et le protocole SMG-II.
-- [Fork Anenji de DESS Monitor Local](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-  — beta.4 avec SUB, PN complet et SOC réel, intégré sur `main`
-  (release `v1.1.0-beta.4-anenji.3`).
-- [Documentation ESPHome Modbus](https://esphome.io/components/modbus_controller.html)
+La suite pure ne demande pas Home Assistant. Les tests de cycle de vie
+(`tests/test_setup_hass.py`, `tests/test_entities.py`, etc.) nécessitent
+`pytest-homeassistant-custom-component` et tournent dans le job CI Linux.
 
 ## Licence
 
-GPL-3.0 — voir [LICENSE](LICENSE).
+Le dépôt upstream ne déclare pas de licence. Ce fork n'en ajoute pas
+unilatéralement : considérer le code comme « tous droits réservés à l'auteur
+upstream » tant que la situation n'est pas clarifiée.

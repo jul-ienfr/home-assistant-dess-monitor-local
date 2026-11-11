@@ -31,7 +31,7 @@ from custom_components.dess_monitor_local.hub import InverterDevice
 _LOGGER = logging.getLogger(__name__)
 
 # SMG-II Modbus register that resets a latched fault state when written.
-# Documented in ESPHome's smg-ii project as "Exit fault state — write 1".
+# Documented in the syssi SMG-II reference as "Exit fault state — write 1".
 _EXIT_FAULT_REGISTER = 426
 
 

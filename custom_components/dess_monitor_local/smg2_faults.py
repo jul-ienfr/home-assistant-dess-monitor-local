@@ -6,7 +6,7 @@ The SMG-II Modbus map exposes two 32-bit status words:
 * register ``108`` (2 words) — warnings
 
 The bit assignment below comes from the published SMG-II register map
-(the same map used by the ESPHome ``syssi`` SMG-II package).  Keeping the
+(the same map used by the ``syssi`` SMG-II reference).  Keeping the
 keys stable lets the Home Assistant entities and automations refer to
 ``pv_low_voltage`` instead of a firmware-specific hex code, while the
 translation tables provide a human-readable label and an actionable hint

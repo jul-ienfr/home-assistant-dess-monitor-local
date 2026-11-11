@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The repository is now integration-only.** Removed the ESPHome firmware,
+  the ESP32 wiring guide, the legacy firmware configurations, the upstream
+  compatibility patch, the SpecKit scaffolding and the hardware validation
+  specs. The README and the EyBond/Marketplace documentation now describe
+  only the Home Assistant integration.
+- **All documentation links were checked against the new tree.** The README
+  is a Marketplace-ready landing page; `INTEGRATION.md`, `EYBOND_LOCAL.md`,
+  `PROTOCOL.md` and `MARKETPLACE.md` no longer reference the removed files.
+
 ## 1.1.0-beta.4-anenji.5 — 2026-11-11
 
 ### Added
@@ -144,8 +157,8 @@
   numbers (battery OVP, bulk/float/recovery/cut-off voltages, max charge
   current, equalization voltage/time/timeout/interval, SOC thresholds).
   A diagnostic **Configuration incoherent** sensor flags invalid
-  threshold combinations. The optional ESPHome web UI is no longer needed
-  for daily operation.
+  threshold combinations. No separate firmware web UI is needed for daily
+  operation.
 
 ### Changed
 
@@ -183,7 +196,7 @@
   link**; the legacy HACS path is kept for Home Assistant versions before
   2026.11.
 - Added the single-Modbus-master warning: do not use the `serial`/`modbus`
-  transport while ESPHome is polling the same inverter port.
+  transport while another master is polling the same inverter port.
 
 ## 1.1.0-beta.3-anenji.3 — 2026-11-10
 

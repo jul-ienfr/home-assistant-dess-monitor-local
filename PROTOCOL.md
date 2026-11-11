@@ -2,9 +2,9 @@
 
 **Version** : 1.1.0 — 2026-11-10
 
-Ce document décrit la carte de registres utilisée par `anenji.yaml`. Il est la
-référence du dépôt : toute modification du YAML doit être cohérente avec cette
-page.
+Ce document décrit la carte de registres utilisée par l'adaptateur Modbus de
+l'intégration `dess_monitor_local`. Toute modification des projections ou des
+plages d'écriture doit rester cohérente avec cette page.
 
 > **Modèles concernés** : Anenji / EASUN / ISolar SMG-II 4,2 kW et 6,2 kW.
 > **Non concernés** : Anenji 11 kW (registres 277+), variante 6 kW USB-A
@@ -25,7 +25,8 @@ page.
 | Délai | `send_wait_time: 200ms`, `command_throttle: 200ms` |
 
 L'onduleur peut exposer un port RJ45 (RS232), un port USB-A (variante 6 kW) ou
-des bornes RS485. Vérifier le modèle avant de câbler. Voir [WIRING.md](WIRING.md).
+des bornes RS485. L'intégration y accède par le transport configuré : `serial`,
+`tcp` ou `eybond`.
 
 ## 2. Mesures
 
@@ -130,9 +131,9 @@ plages sont celles de la configuration 24 V ; doubler les tensions pour un parc
 
 Le firmware SMG-II **refuse** les valeurs hors plage avec une exception
 Modbus 03 (Illegal Data Value) et conserve l'ancienne valeur. Vérifié sur
-l'appareil : `303=4`, `305=2` et `337=91` sont rejetés. Les bornes du YAML
-restent nécessaires pour empêcher la saisie avant l'envoi et pour documenter
-les limites ; elles ne remplacent pas cette validation.
+l'appareil : `303=4`, `305=2` et `337=91` sont rejetés. Les bornes exposées par
+l'intégration restent nécessaires pour empêcher la saisie avant l'envoi et pour
+documenter les limites ; elles ne remplacent pas cette validation.
 
 ### Cohérence inter-paramètres
 
@@ -153,41 +154,31 @@ n'est actif, ce qui est le comportement attendu.
 
 ### Écriture correcte
 
-```yaml
-- platform: modbus_controller
-  use_write_multiple: true
-  address: 324
-  value_type: U_WORD
-  lambda: "return x * 0.1f;"        # lecture : registre -> volts
-  write_lambda: "return x * 10.0f;" # écriture : volts -> registre
-```
-
-Ne pas pousser d'octets dans `payload` : `write_lambda` doit **retourner** la
-valeur entière à écrire.
+Les paramètres s'écrivent avec la fonction 16 (write multiple registers). La
+valeur Home Assistant est convertie en entier selon l'échelle du registre, puis
+relue au cycle suivant pour confirmer l'état réel. Les conversions et les
+bornes sont définies dans
+`custom_components/dess_monitor_local/smg2_settings.py`.
 
 ## 4. Défauts et avertissements
 
 Les registres 100 et 108 sont des masques 32 bits (2 registres). La
-correspondance complète des bits est dans
-[`specs/001-anenji-functional/contracts/register-map.md`](specs/001-anenji-functional/contracts/register-map.md).
+correspondance complète des bits et les libellés sont dans
+`custom_components/dess_monitor_local/smg2_faults.py`.
 
 ## 5. Variantes non supportées
 
 | Modèle | Registres | Pourquoi |
 |--------|-----------|----------|
-| Anenji 11 kW | 338, 254, 277-281, 351, 389 | Carte différente ; voir `PreK/esphome-anenji-11kw-native-modbus`. |
-| SMG-II 6 kW USB-A | 80-345 | Port et carte différents ; voir `syssi/esphome-smg-ii`. |
+| Anenji 11 kW | 338, 254, 277-281, 351, 389 | Carte différente, non supportée. |
+| SMG-II 6 kW USB-A | 80-345 | Port et carte différents, non supportés. |
 | Axpert/Voltronic MKS | 200/201, 250-259 | Ce ne sont pas les registres SMG-II. |
 
 ## 6. Sources
 
-- [syssi/esphome-smg-ii](https://github.com/syssi/esphome-smg-ii) — projet
-  canonique et PDF `SMG-RS232+Communication+Protocol+V1.0.1.pdf`.
-- [jul-ienfr/esphome-anenji-4.2kw-wifi](https://github.com/jul-ienfr/esphome-anenji-4.2kw-wifi)
-  — fork historique, dérivé de syssi ; **non utilisé comme source de vérité**.
-- [janas-karol/esphome-anenji-6.2kw](https://github.com/janas-karol/esphome-anenji-6.2kw)
-  — fork 6,2 kW.
-- [PreK/esphome-anenji-11kw-native-modbus](https://github.com/PreK/esphome-anenji-11kw-native-modbus)
-  — carte 11 kW.
-- [attilagyurman/anenji-local-modbus](https://github.com/attilagyurman/anenji-local-modbus)
-  — relevé de registres 11 kW.
+- Protocole RS232 SMG-II V1.0.1 (document constructeur).
+- Relevés, écritures FC16 et vérifications sur l'onduleur du site : voir
+  [`EYBOND_LOCAL.md`](EYBOND_LOCAL.md).
+- Projections et tables de bits de l'intégration :
+  `custom_components/dess_monitor_local/smg2_settings.py` et
+  `smg2_faults.py`.

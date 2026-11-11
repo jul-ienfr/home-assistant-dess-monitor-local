@@ -441,7 +441,7 @@ class SMG2ConfigurationCoherenceSensor(CoordinatorEntity, BinarySensorEntity):
 
     The individual number entities enforce their own min/max, but they
     cannot prevent a physically incoherent combination such as OVP 28 V
-    with a 30 V bulk target. This sensor mirrors the ESPHome interlock and
+    with a 30 V bulk target. This sensor mirrors the reference SMG-II interlock and
     lists every violated rule in ``violations``.
     """
 

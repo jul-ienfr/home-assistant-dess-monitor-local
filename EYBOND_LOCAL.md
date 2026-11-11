@@ -8,8 +8,8 @@
 puis écriture FC16 de contrôle.
 
 Ce document décrit la voie **la plus directe** pour piloter l'onduleur depuis
-Home Assistant sans ESP32 ni passerelle supplémentaire : réutiliser le dongle
-Wi-Fi d'origine comme transport local. Le dongle reste maître du bus RS485 de
+Home Assistant sans passerelle supplémentaire : réutiliser le dongle Wi-Fi
+d'origine comme transport local. Le dongle reste maître du bus RS485 de
 l'onduleur ; Home Assistant lui parle en Modbus RTU à travers une connexion TCP
 inverse.
 
@@ -51,7 +51,6 @@ transporter une connexion sortante du dongle vers Home Assistant.
 | Firmware du dongle | `8.50.12.3` |
 | Ports du dongle | `80` ouvert (interface web) ; `502` et `8899` fermés |
 | Onduleur | SMG-II 24 V, adresse Modbus `1`, 9600 8N1 |
-| ESP32 existant | `192.168.68.62` — à ne pas laisser poller le même bus |
 | Routeur | `192.168.68.1`, LAN `192.168.68.0/22`, broadcast `192.168.71.255` |
 
 Le dongle est bien celui de l'onduleur : son interface web et son heartbeat
@@ -141,12 +140,12 @@ Le test FC16 écrivait la valeur déjà présente (`0`), donc aucun état n'a é
 modifié. L'intégration `dess_monitor_local` essaie FC06 puis bascule
 automatiquement sur FC16 ; c'est le comportement attendu pour ce firmware.
 
-### 4.4 Correctif de compatibilité
+### 4.4 PN complet et priorité SUB
 
-Le correctif de `patches/` a été vérifié sur le dongle :
+Vérifiés sur le dongle :
 
 - extraction du PN complet : `E50000221162926051` (18 caractères) ;
-- écriture SUB via le mapping corrigé : requête FC16 acceptée
+- écriture SUB via le registre 301 (valeur `3`) : requête FC16 acceptée
   (`{"status": "OK", "func": 16}`) ;
 - relecture du registre 301 après ce test : toujours `3` (SUB). L'écriture
   était volontairement une écriture de la valeur déjà présente, donc le mode
@@ -173,10 +172,10 @@ Les correspondances de mesures ont été vérifiées par cohérence :
 - `225 = 213 / 643` : 51 W / 4200 W = 1 % ;
 - `202` ≈ `210` et `203` ≈ `212` : entrée et sortie à ~236 V / 50 Hz.
 
-Paramètres présents sur l'onduleur mais absents du YAML avant l'audit :
-`341` (SOC retour réseau), `342` (SOC retour batterie) et `343` (coupure basse
-SOC). Ils ont été ajoutés, avec des bornes cohérentes avec le firmware. Le
-registre `406` (mode d'allumage) était déjà piloté par le YAML mais manquait
+Paramètres présents sur l'onduleur mais absents de l'intégration avant
+l'audit : `341` (SOC retour réseau), `342` (SOC retour batterie) et `343`
+(coupure basse SOC). Ils ont été ajoutés, avec des bornes cohérentes avec le
+firmware. Le registre `406` (mode d'allumage) était déjà piloté mais manquait
 dans `PROTOCOL.md` ; la documentation a été complétée.
 
 Bornes resserrées après l'audit :
@@ -199,29 +198,16 @@ Bornes resserrées après l'audit :
   `config/custom_components`. HACS est intégré au Marketplace depuis 2026.11 ;
   l'application « Get HACS » n'est plus nécessaire.
 - Port TCP `8899` libre sur l'hôte Home Assistant.
-- Un seul maître sur le bus RS485 : si l'ESP32 `192.168.68.62` est encore
-  câblé au même port COM, le débrancher ou désactiver son polling avant de
-  continuer.
+- Un seul maître sur le bus RS485 : si un autre maître interroge déjà le même
+  port COM, le désactiver avant de continuer.
 - L'application cloud SmartESS / DESS Monitor sera hors ligne pendant que Home
   Assistant contrôle le dongle. C'est normal (voir les limites).
 
 ### 5.2 Installer l'intégration
 
-Deux dépôts sont utilisables :
-
-| Dépôt | Version | Contenu |
-|-------|---------|---------|
-| **Fork Anenji** (recommandé) | `1.1.0-beta.4-anenji.3` | beta.3 + SUB + PN complet + SOC réel + pilotage complet |
-| Upstream | `v1.1.0-beta.3` | beta.3 non corrigée |
-
-Le fork est intégré à la branche `main` du dépôt :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
-(release `v1.1.0-beta.4-anenji.3`).
-
-Il reprend la beta.3 upstream et ajoute le correctif SUB / PN complet décrit au
-§ 7.4, les valeurs réelles de SOC et de puissance apparente, la gestion des
-NAK et le démarrage non bloquant. Le transport Eybond reste celui de
-l'upstream.
+Installer la dernière release de
+<https://github.com/jul-ienfr/home-assistant-dess-monitor-local> via le
+Marketplace (ou HACS avant Home Assistant 2026.11).
 
 Depuis Home Assistant 2026.11, HACS est intégré sous le nom **Marketplace**
 (`Paramètres → Marketplace`). L'application « Get HACS » n'est plus nécessaire
@@ -234,8 +220,8 @@ Via Marketplace :
 2. En haut à droite, **Add from link** / **Ajouter depuis un lien**.
 3. Coller `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`,
    puis choisir **Integration** si le type est demandé.
-4. Ouvrir la fiche du dépôt, **Install**, et sélectionner la version
-   `v1.1.0-beta.4-anenji.3`.
+4. Ouvrir la fiche du dépôt, **Install**, et sélectionner la dernière
+   release publiée (activer les préversions pour la ligne bêta).
 5. L'intégration a un config flow : elle se charge immédiatement. Sinon,
    redémarrer Home Assistant, puis l'ajouter dans
    `Paramètres → Appareils et services`.
@@ -245,23 +231,18 @@ tag. La version de `manifest.json` doit correspondre au tag (sans le préfixe
 `v`). Toute nouvelle version doit donc être publiée sur `main` ; voir
 [`MARKETPLACE.md`](MARKETPLACE.md).
 
-Pour rester sur l'upstream, ajouter à la place
-`https://github.com/Antoxa1081/home-assistant-dess-monitor-local`, activer les
-préversions et installer `v1.1.0-beta.3`, puis appliquer le patch du § 7.4.1.
-
 Installation manuelle : télécharger l'archive du dépôt, puis copier le dossier
 `custom_components/dess_monitor_local` dans `/config/custom_components/`, et
 redémarrer Home Assistant.
 
 > **Un seul maître sur le bus Modbus.** Ne pas créer une entrée avec le
-> transport `serial` ou `modbus` sur le port COM déjà interrogé par l'ESPHome :
-> deux maîtres se marcheraient dessus. Utiliser le transport `eybond` du
-> dongle Wi-Fi, le hub Eybond multi-dongles, ou désactiver le polling de
-> l'ESP32 avant de continuer.
+> transport `serial` ou `modbus` sur un port COM déjà interrogé par un autre
+> maître : deux maîtres se marcheraient dessus. Utiliser le transport `eybond`
+> du dongle Wi-Fi ou le hub Eybond multi-dongles.
 
-> **Changement de PN** : le fork lit le PN complet (18 caractères). Si un
-> onduleur enfant a déjà été créé avec l'ancien PN tronqué (14 caractères),
-> le supprimer puis le reconfigurer après l'installation du fork.
+> **Changement de PN** : l'intégration lit le PN complet (18 caractères). Si un
+> onduleur enfant a déjà été créé avec un ancien PN tronqué (14 caractères),
+> le supprimer puis le reconfigurer après l'installation.
 
 ### 5.3 Créer le hub EyBond
 
@@ -281,9 +262,9 @@ redémarrer Home Assistant.
 
 Sur HAOS ou une installation native, laisser `Announce IP` **vide** : tant
 qu'un dongle manque, l'intégration revérifie l'adresse locale toutes les 30 s
-(la première annonce après une longue pause la revérifie immédiatement) et met à jour le `set>server`
-(ainsi que le broadcast du sous-réseau) si le bail DHCP change. Aucune
-vérification n'a lieu quand tous les dongles sont connectés.
+(la première annonce après une longue pause la revérifie immédiatement) et met
+à jour le `set>server` (ainsi que le broadcast du sous-réseau) si le bail DHCP
+change. Aucune vérification n'a lieu quand tous les dongles sont connectés.
 Renseigner une IP explicite uniquement en Docker bridge, où l'IP LAN de l'hôte
 n'est pas une interface locale ; dans ce cas il faut la mettre à jour
 manuellement si elle change. Le broadcast `192.168.71.255` correspond au
@@ -378,95 +359,17 @@ dongle. Ne pas lancer deux instances Home Assistant, ni un script de diagnostic
 en même temps que l'intégration. Le script `tools/eybond_probe.py` doit être
 utilisé après avoir arrêté l'intégration.
 
-### 7.3 PN tronqué dans la version beta.3 upstream
+### 7.3 Écritures et bouton de défaut
 
-Le heartbeat contient le PN complet sur 18 caractères
-(`E50000221162926051`), mais `v1.1.0-beta.3` ne lit que les 14 premiers :
+Les écritures passent par FC16 et sont validées. Le bouton **Exit Fault State**
+utilise l'adaptateur Modbus, donc il fonctionne aussi sur un enfant
+`eybond-modbus://`.
 
-```text
-E5000022116292
-```
+### 7.4 Intégration en beta
 
-L'intégration reste cohérente avec elle-même : elle utilise cette valeur
-tronquée comme identifiant interne. Si une configuration manuelle le demande,
-utiliser la valeur affichée par Home Assistant, pas le PN complet. Le fork
-`1.1.0-beta.3-anenji.3` lit le PN complet ; un correctif est aussi fourni dans
-`patches/` pour ceux qui restent sur l'upstream.
-
-### 7.4 Priorité de sortie SUB non reconnue (beta.3 upstream)
-
-Au moment du relevé, l'onduleur est en mode **SUB** (registre 301 = `3`). La
-version beta.3 upstream ne connaît que `0` (Utility First), `1` (Solar First)
-et `2` (SBU) :
-
-- la lecture affiche **Utility First** au lieu de SUB ;
-- le sélecteur ne propose pas SUB.
-
-> Ne pas « corriger » l'affichage en resélectionnant Utility First : cela
-> écrirait réellement `0` dans le registre 301 et changerait le mode de
-> l'onduleur.
-
-Trois solutions :
-
-1. installer le **fork Anenji** (§ 5.2), qui contient déjà SUB et le PN complet ;
-2. laisser la priorité de sortie se régler sur l'écran de l'onduleur ;
-3. appliquer le correctif `patches/dess-monitor-local-beta3-anenji.patch` sur
-   l'upstream, puis redémarrer Home Assistant.
-
-Le correctif est fourni « tel quel » pour la beta.3 ; le fork
-`1.1.0-beta.3-anenji.3` l'intègre déjà. Une mise à jour de l'intégration peut
-rendre le patch obsolète ; dans ce cas, ouvrir une issue upstream pour intégrer
-SUB et le PN complet.
-
-### 7.4.1 Faut-il créer un fork ?
-
-Non, il est déjà intégré :
-<https://github.com/jul-ienfr/home-assistant-dess-monitor-local>
-
-La branche `main` contient la beta.3 upstream, le correctif SUB et le PN
-complet, ainsi que les correctifs de la version
-`1.1.0-beta.3-anenji.3`. Le tag `v1.1.0-beta.3-anenji.3` marque exactement
-cette version. La branche contient `hacs.json` et `custom_components/`, donc
-le Marketplace peut l'installer directement. Aucun fork supplémentaire n'est
-nécessaire. Une nouvelle release de l'intégration doit être taguée sur `main`.
-
-Pour ceux qui préfèrent rester sur le dépôt upstream, le patch reste
-applicable. Copier d'abord `patches/dess-monitor-local-beta3-anenji.patch`
-dans `/config/patches/`, puis appliquer :
-
-```bash
-cd /config
-patch -p1 < /config/patches/dess-monitor-local-beta3-anenji.patch
-```
-
-Ou, si `git apply` est disponible :
-
-```bash
-cd /config
-git apply patches/dess-monitor-local-beta3-anenji.patch
-```
-
-Redémarrer Home Assistant après l'application. Une mise à jour via le
-Marketplace (ex-HACS) écrase les fichiers : il faudra réappliquer le patch ou
-passer à une version upstream qui l'intègre.
-
-> **À faire avant de configurer l'onduleur enfant** : le patch remplace le PN
-> tronqué par le PN complet comme clé de routage. Si un enfant a déjà été créé
-> avec l'ancien PN, le supprimer puis le reconfigurer après le patch.
-
-### 7.5 Écritures et bouton de défaut
-
-Les écritures passent par FC16 et sont validées. Dans la beta.3 upstream, le
-bouton **Exit Fault State** utilise encore le chemin Modbus TCP direct et ne
-fonctionne pas sur un enfant `eybond-modbus://`. Le fork
-`1.1.0-beta.3-anenji.3` passe par `ModbusAdapter` et corrige ce point ; sinon,
-utiliser l'écran de l'onduleur pour acquitter un défaut.
-
-### 7.6 Intégration en beta
-
-`1.1.0-beta.3-anenji.3` reste une préversion. Sauvegarder la configuration
-Home Assistant avant l'installation et relire les notes de version avant chaque
-mise à jour.
+Les versions `1.1.0-beta.4-anenji.*` restent des préversions. Sauvegarder la
+configuration Home Assistant avant l'installation et relire les notes de
+version avant chaque mise à jour.
 
 ## 8. Dépannage
 
@@ -476,10 +379,9 @@ mise à jour.
 | Aucune connexion | Port 8899 fermé/pare-feu | Ouvrir le TCP 8899 en entrée |
 | Aucune connexion | Dongle et HA sur des VLAN séparés | Autoriser dongle → HA:8899 |
 | Connexion puis aucune donnée | Adresse RS485 ou protocole faux | Protocole `modbus`, adresse `1` |
-| Connexion instable | ESP32 poll aussi le bus | Un seul maître RS485 |
+| Connexion instable | Un autre maître interroge le bus | Un seul maître RS485 |
 | Connexion instable | Deux écouteurs sur 8899 | Arrêter l'autre instance/script |
 | Le dongle revient au cloud | Home Assistant a arrêté l'écoute | Redémarrer l'intégration |
-| Priorité affichée « Utility First » | Mode SUB non mappé | Correctif ou écran onduleur |
 | Écriture sans effet | FC06 refusée | L'intégration bascule FC16 ; vérifier les logs |
 | L'app SmartESS est hors ligne | Contrôle local actif | Comportement normal |
 
@@ -510,10 +412,8 @@ logger:
 - [DESS Monitor Local](https://github.com/Antoxa1081/home-assistant-dess-monitor-local)
   — intégration Home Assistant d'origine.
 - [Fork Anenji](https://github.com/jul-ienfr/home-assistant-dess-monitor-local)
-  — beta.3 + SUB + PN complet + SOC réel, intégré sur `main`
-  (release `v1.1.0-beta.4-anenji.3`).
+  — intégration maintenue, SUB + PN complet + SOC réel, publiée sur `main`.
 - [Documentation EyBond du projet](https://github.com/Antoxa1081/home-assistant-dess-monitor-local/blob/main/wiki/EyBond-Transport-Setup.md)
   — transport inverse, Docker et dépannage.
 - [`PROTOCOL.md`](PROTOCOL.md) — carte des registres SMG-II.
-- [`REMOTE_ACCESS.md`](REMOTE_ACCESS.md) — comparaison des autres voies sans ESP32.
 - [`tools/eybond_probe.py`](tools/eybond_probe.py) — diagnostic lecture seule.

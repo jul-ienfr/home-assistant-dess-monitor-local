@@ -8,9 +8,8 @@
 > Upstream: <https://github.com/Antoxa1081/home-assistant-dess-monitor-local>
 >
 > **Repository layout**: the `main` branch contains this integration
-> (`hacs.json`, `custom_components/`) and the Anenji ESPHome firmware. The
-> ESPHome documentation is in [`README.md`](README.md). Marketplace metadata
-> and release rules: [`MARKETPLACE.md`](MARKETPLACE.md).
+> (`hacs.json`, `custom_components/`) and its documentation. Marketplace
+> metadata and release rules: [`MARKETPLACE.md`](MARKETPLACE.md).
 
 ## What this fork changes
 
@@ -127,8 +126,7 @@ the telemetry:
   exceeds the model limit.
 
 Every setting is a normal Home Assistant entity, so it can be dashboarded,
-automated, logged, and renamed like the sensors. The optional ESPHome web
-UI is no longer required for daily operation; the integration polls the
+automated, logged, and renamed like the sensors. The integration polls the
 SMG-II directly over Modbus or the Eybond dongle. Do not run two Modbus
 masters on the same inverter port.
 
@@ -144,8 +142,8 @@ HACS is built into Home Assistant 2026.11 as the **Marketplace**. The old
 3. Enter
    `https://github.com/jul-ienfr/home-assistant-dess-monitor-local` and add
    it. Choose **Integration** if the type is requested.
-4. Open the repository, select **Install**, and choose the version
-   `v1.1.0-beta.4-anenji.3`.
+4. Open the repository, select **Install**, and choose the latest published
+   release. Enable pre-releases in the Marketplace if you want the beta line.
 5. The integration has a config flow and loads immediately. If a restart is
    requested, restart Home Assistant, then add it under
    **Settings → Devices & services**.
@@ -178,9 +176,9 @@ preferable: it handles updates and the `pyserial-asyncio-fast` requirement.
 
 The SMG-II has a single Modbus bus. Do **not** configure this integration with
 the `serial` or `modbus` transport on a port that another master is already
-polling. In particular, do not run it alongside the ESPHome `Anenji 4000w
-Master` node on the same inverter COM port. Use the `eybond` transport of the
-Wi-Fi dongle or the Eybond hub, or disable the other master first.
+polling — another integration, a firmware, or a diagnostic tool. Use the
+`eybond` transport of the Wi-Fi dongle or the Eybond hub, or disable the other
+master first.
 
 ## Configuration
 
@@ -240,13 +238,6 @@ For protocol-specific notes and the internal device URI format see the
 - If an Eybond child was configured with the old 14-character PN, remove
   and re-add it so the full PN becomes the routing key.
 
-## Optional patch for upstream
-
-`patches/dess-monitor-local-beta3-anenji.patch` is the minimal compatibility
-patch for staying on upstream `v1.1.0-beta.3` (full 18-character PN + SUB).
-This fork already includes it and does not need the patch. See
-[`patches/README.md`](patches/README.md) for instructions.
-
 ## Tests
 
 ```bash
@@ -263,5 +254,4 @@ runs anywhere Python 3.12+ is available.
 
 The upstream repository does not declare a license. This fork does not add
 one unilaterally; treat it as “all rights reserved by the upstream author”
-until upstream clarifies. The optional patch is provided for interoperability
-with the same upstream code.
+until upstream clarifies.

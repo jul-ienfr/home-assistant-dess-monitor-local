@@ -1,10 +1,5 @@
-# Gitignore settings for ESPHome
-/.esphome/
+# Local secrets (never commit)
 /secrets.yaml
-*.bin
-*.rbl
-*.crc
-*.ota.bin
 
 # IDE
 .vscode/

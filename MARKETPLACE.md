@@ -67,8 +67,8 @@ Tout est sur la branche `main`, qui est la branche par défaut :
 | `hacs.json` | métadonnées Marketplace |
 | `custom_components/dess_monitor_local/` | intégration DESS Monitor Local |
 | `INTEGRATION.md` | documentation de l'intégration |
-| `README.md` | documentation du firmware ESPHome |
-| `anenji.yaml` et le reste | firmware ESPHome Anenji |
+| `README.md` | présentation du dépôt et de l'intégration |
+| `wiki/` | documentation utilisateur complémentaire |
 
 Le Marketplace cherche `hacs.json` et `custom_components/` sur la branche par
 défaut : c'est pourquoi ils sont à la racine de `main`. Il n'y a plus de
@@ -81,8 +81,8 @@ branche d'intégration séparée.
 3. Coller `https://github.com/jul-ienfr/home-assistant-dess-monitor-local`
    (ou `jul-ienfr/home-assistant-dess-monitor-local`) et valider.
 4. Choisir **Integration** si le type est demandé.
-5. Ouvrir la fiche, **Install**, puis sélectionner la version
-   `v1.1.0-beta.4-anenji.3`.
+5. Ouvrir la fiche, **Install**, puis sélectionner la dernière release
+   publiée. Activer les préversions pour la ligne bêta.
 
 Une intégration avec config flow se charge immédiatement après l'installation.
 Les mises à jour et les suppressions nécessitent un redémarrage, proposé par
@@ -106,7 +106,7 @@ délai de quelques heures est donc normal.
 3. Incrémenter `version` dans
    `custom_components/dess_monitor_local/manifest.json`. Cette valeur doit
    correspondre au futur tag, sans le préfixe `v` (par exemple manifest
-   `1.1.0-beta.4-anenji.3` pour le tag `v1.1.0-beta.4-anenji.3`).
+   `1.2.0` pour le tag `v1.2.0`).
 4. Committer et pousser :
 
    ```bash
@@ -144,8 +144,8 @@ antérieure compatible.
   Marketplace utilise alors le dernier commit de la branche par défaut.
 - **Ne pas modifier un tag existant** : les utilisateurs qui l'ont installé
   gardent leurs fichiers, et le Marketplace ne retrouve plus la version.
-- **Ne pas installer l'intégration sur le bus série** si l'ESPHome interroge
-  déjà le port Modbus de l'onduleur : un seul maître à la fois. Utiliser le
-  transport `eybond` du dongle Wi-Fi ou le hub Eybond multi-dongles.
+- **Ne pas installer l'intégration sur le bus série** si un autre maître
+  interroge déjà le port Modbus de l'onduleur : un seul maître à la fois.
+  Utiliser le transport `eybond` du dongle Wi-Fi ou le hub Eybond multi-dongles.
 - **L'ancien HACS** ne doit plus être installé à partir de 2026.11 ; ses
   fichiers sont repris par le Marketplace.
