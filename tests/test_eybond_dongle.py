@@ -172,6 +172,44 @@ class TestResolveAnnounceTarget:
         resolve.assert_called_once_with("10.0.0.42")
 
 
+class TestAnnounceIpRefresh:
+    def test_paused_announcer_never_refreshes(self):
+        # Every expected dongle is connected: a working system is left alone.
+        assert not ey.should_refresh_announce_ip(
+            announce_ip=None,
+            should_announce=False,
+            elapsed_seconds=3600.0,
+        )
+
+    def test_explicit_announce_ip_is_never_auto_detected(self):
+        assert not ey.should_refresh_announce_ip(
+            announce_ip="192.168.68.60",
+            should_announce=True,
+            elapsed_seconds=3600.0,
+        )
+
+    def test_announcer_waits_for_refresh_interval(self):
+        assert not ey.should_refresh_announce_ip(
+            announce_ip=None,
+            should_announce=True,
+            elapsed_seconds=ey.ANNOUNCE_IP_REFRESH - 0.1,
+        )
+        assert ey.should_refresh_announce_ip(
+            announce_ip=None,
+            should_announce=True,
+            elapsed_seconds=ey.ANNOUNCE_IP_REFRESH,
+        )
+
+    def test_resume_after_long_pause_refreshes_immediately(self):
+        # last_ip_refresh is frozen while paused, so the elapsed time keeps
+        # growing and the first broadcast after a long pause re-resolves.
+        assert ey.should_refresh_announce_ip(
+            announce_ip=None,
+            should_announce=True,
+            elapsed_seconds=600.0,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Multi-session manager — in-memory fakes (no real socket)
 # ---------------------------------------------------------------------------

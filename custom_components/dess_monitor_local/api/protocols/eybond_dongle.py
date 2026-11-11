@@ -361,6 +361,27 @@ def resolve_announce_target(
     return ip, broadcast
 
 
+def should_refresh_announce_ip(
+    *,
+    announce_ip: str | None,
+    should_announce: bool,
+    elapsed_seconds: float,
+    refresh_interval: float = ANNOUNCE_IP_REFRESH,
+) -> bool:
+    """Whether the announcer should re-resolve the local address now.
+
+    An explicit announce IP is never auto-detected, and a paused announcer
+    must not touch the network configuration at all. Because the last
+    refresh time is frozen while paused, a pause longer than the refresh
+    interval makes the first broadcast after resume re-resolve immediately.
+    """
+    return (
+        not announce_ip
+        and should_announce
+        and elapsed_seconds >= refresh_interval
+    )
+
+
 # ---------------------------------------------------------------------------
 # Session — one connected dongle
 # ---------------------------------------------------------------------------
@@ -686,10 +707,10 @@ class EybondManager:
                 # all — a working system is left alone. If the pause lasted
                 # longer than the refresh period, the first broadcast after
                 # resume re-resolves the address immediately.
-                if (
-                    not self.announce_ip
-                    and should_announce
-                    and now - last_ip_refresh >= ANNOUNCE_IP_REFRESH
+                if should_refresh_announce_ip(
+                    announce_ip=self.announce_ip,
+                    should_announce=should_announce,
+                    elapsed_seconds=now - last_ip_refresh,
                 ):
                     last_ip_refresh = now
                     new_ip, new_broadcast = resolve_announce_target(
