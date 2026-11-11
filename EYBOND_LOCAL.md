@@ -276,13 +276,17 @@ redémarrer Home Assistant.
 | Bind host | `0.0.0.0` |
 | Port | `8899` |
 | Broadcast | `192.168.71.255` |
-| Announce IP | `192.168.68.60` |
+| Announce IP | *(vide — détection automatique)* |
 | Intervalle de mise à jour | `10` s |
 
-`Announce IP` doit être l'adresse **LAN de la machine qui exécute Home
-Assistant**, jamais l'adresse d'un conteneur Docker. Le broadcast
-`192.168.71.255` correspond au sous-réseau `/22` du site ; `255.255.255.255`
-fonctionne aussi dans la plupart des cas.
+Sur HAOS ou une installation native, laisser `Announce IP` **vide** :
+l'intégration revérifie l'adresse locale toutes les 30 s et met à jour le
+`set>server` (ainsi que le broadcast du sous-réseau) si le bail DHCP change.
+Renseigner une IP explicite uniquement en Docker bridge, où l'IP LAN de l'hôte
+n'est pas une interface locale ; dans ce cas il faut la mettre à jour
+manuellement si elle change. Le broadcast `192.168.71.255` correspond au
+sous-réseau `/22` du site ; `255.255.255.255` fonctionne aussi dans la plupart
+des cas.
 
 5. Valider et attendre 30 à 60 secondes. L'appareil « Discovered dongles »
    doit passer à `1`, et une notification propose de configurer le dongle.
@@ -312,8 +316,10 @@ réseau.
 ### 6.1 Home Assistant OS ou installation native
 
 Rien à configurer côté routeur. Le dongle ouvre une connexion sortante vers
-`192.168.68.60:8899`. Il suffit que le pare-feu de l'hôte accepte le TCP 8899
-en entrée depuis le réseau local.
+l'adresse courante de Home Assistant sur le port 8899. Il suffit que le
+pare-feu de l'hôte accepte le TCP 8899 en entrée depuis le réseau local. En
+mode `Announce IP` automatique, un changement d'adresse de Home Assistant est
+re-annoncé sous 30 s.
 
 ### 6.2 Home Assistant en Docker
 
@@ -332,7 +338,8 @@ Avec `network_mode: host`, la publication n'est pas nécessaire, mais le port
 
 > Ne jamais mettre l'IP du conteneur dans `Announce IP`. Le dongle ne peut pas
 > router vers le réseau interne de Docker. Utiliser l'IP LAN de la machine
-> hôte.
+> hôte et la mettre à jour si elle change : la détection automatique est
+> désactivée dès qu'une IP explicite est renseignée.
 
 Sous Docker Desktop pour Windows, le NAT interne peut compliquer les tests :
 vérifier que le port publié est bien joignable depuis le poste
@@ -462,7 +469,7 @@ mise à jour.
 
 | Symptôme | Cause probable | Action |
 |----------|----------------|--------|
-| Aucune connexion du dongle | `Announce IP` incorrecte | Mettre l'IP LAN de l'hôte HA |
+| Aucune connexion du dongle | `Announce IP` incorrecte | Laisser vide en HAOS natif ; en Docker, mettre l'IP LAN de l'hôte |
 | Aucune connexion | Port 8899 fermé/pare-feu | Ouvrir le TCP 8899 en entrée |
 | Aucune connexion | Dongle et HA sur des VLAN séparés | Autoriser dongle → HA:8899 |
 | Connexion puis aucune donnée | Adresse RS485 ou protocole faux | Protocole `modbus`, adresse `1` |

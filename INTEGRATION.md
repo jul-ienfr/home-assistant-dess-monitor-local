@@ -198,13 +198,23 @@ integration card.
 Common option for all protocols:
 
 - **Update interval** — how often Home Assistant polls the device, `1`–`300` s
-  (default `10`).
+  (default `10`). EyBond dongles have a **5 s minimum** because they cycle
+  their TCP session every few seconds; faster polls mostly hit connection
+  gaps.
 
 For a single SMG-II behind an EyBond dongle, choose protocol `modbus`,
 transport `eybond`, bind `0.0.0.0:8899`, and the RS485 address (usually `1`).
 The wizard creates the `eybond-modbus://` URI automatically. The `devaddr`
-is the Modbus unit ID. Set the broadcast address of the dongle's subnet and
-the LAN IP the dongle should call back to.
+is the Modbus unit ID. Set the broadcast address of the dongle's subnet. Leave
+**Announce IP** empty on HAOS/native installations: the local address is
+re-checked every 30 s, so a DHCP change is picked up without a restart. Set it
+explicitly only in Docker bridge mode, where the host LAN IP is not a local
+interface (and update it yourself if that host IP changes).
+
+For a direct TCP/Modbus/PI18 inverter, prefer a **DHCP reservation or a local
+hostname** (e.g. `inverter.local`) over a raw IP. If the address changes
+anyway, editing **Host** in the options keeps the existing entities, unique
+IDs and history — the endpoint identity is stored separately.
 
 For several dongles, use an Eybond hub and enable each discovered child with
 the `modbus` protocol; the hub adds the dongle PN to every child URI.
