@@ -316,7 +316,9 @@ class TestEnergyIntegrationGuard:
             ent._prev_power = 1000.0
             ent._prev_ts = 990.0
             ent.update_energy_value(1000.0)
-        assert ent._attr_native_value == pytest.approx(2000.0 * 10.0 / 3600.0)
+        # Trapezoid over 10 s with both samples at 1000 W:
+        # (1000 + 1000) / 2 * 10 / 3600 Wh.
+        assert ent._attr_native_value == pytest.approx(1000.0 * 10.0 / 3600.0)
         assert ent._prev_power == 1000.0
 
     def test_pauses_when_qpigs_is_stale(self):

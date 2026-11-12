@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.7 — 2026-11-12
+
+### Fixed
+
+- **The *Last live sample* diagnostic sensor no longer errors before the
+  first successful poll.** With no QPIGS sample recorded yet, the
+  `age_seconds` attribute called `round()` on `None`, which Home Assistant
+  logs as an entity error on every state write. It now stays `null` until a
+  timestamp exists.
+- **The Home Assistant CI job is green again.** Its entity-ID assertions
+  still used the pre-translation IDs (`sensor.test_inv_direct_grid_voltage`,
+  `number.test_inv_vsoc_battery_capacity_ah`, …); they now match the IDs
+  derived from the translated entity names. The energy-guard test also
+  expected the wrong trapezoid value (it omitted the division by two).
+
+### Notes
+
+- No other runtime behaviour changed. Restart Home Assistant after
+  updating.
+
 ## 1.1.0-beta.4-anenji.6 — 2026-11-11
 
 ### Changed

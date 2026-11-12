@@ -101,13 +101,15 @@ async def test_setup_creates_entities_and_unloads(hass, enable_custom_integratio
         await hass.async_block_till_done()
 
         # A representative live sensor exists and carries the decoded value.
-        state = hass.states.get("sensor.test_inv_direct_grid_voltage")
+        state = hass.states.get("sensor.test_inv_grid_voltage")
         assert state is not None
         assert state.state == "239.3"
 
         # Control entities from the number/select/switch platforms exist.
-        assert hass.states.get("number.test_inv_vsoc_battery_capacity_ah") is not None
-        assert hass.states.get("select.test_inv_vsoc_battery_mode") is not None
+        # Entity IDs come from the translated names (entity-name
+        # translations), not from the old vSoC-prefixed IDs.
+        assert hass.states.get("number.test_inv_battery_capacity_ah") is not None
+        assert hass.states.get("select.test_inv_battery_mode") is not None
 
         # Clean teardown — the command queue must drain without lingering
         # tasks. Keep this inside the patch: the initial background poll may
@@ -266,7 +268,7 @@ async def test_soc_unavailable_until_capacity_set(hass, enable_custom_integratio
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        soc = hass.states.get("sensor.test_inv_direct_battery_state_of_charge")
+        soc = hass.states.get("sensor.test_inv_battery_state_of_charge")
         # Capacity defaults to None (user hasn't entered Ah) -> unavailable.
         assert soc is not None
         assert soc.state in ("unavailable", "unknown")

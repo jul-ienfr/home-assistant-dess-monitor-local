@@ -132,11 +132,15 @@ class DirectLastSampleSensor(DirectSensorBase):
         device = getattr(self, "_inverter_device", None)
         if coordinator is not None and device is not None:
             last_success_age = getattr(coordinator, "last_success_age", None)
-            attrs["age_seconds"] = (
-                round(last_success_age(device.inverter_id), 1)
+            # Before the first successful poll the coordinator has no
+            # timestamp and returns None; round() must not be called on it or
+            # every state write raises inside this property.
+            age = (
+                last_success_age(device.inverter_id)
                 if callable(last_success_age)
                 else None
             )
+            attrs["age_seconds"] = round(age, 1) if age is not None else None
             section_failures = getattr(coordinator, "section_failures", None)
             if callable(section_failures):
                 stale = section_failures(device.inverter_id, "qpigs")
