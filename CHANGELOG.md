@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0-beta.4-anenji.8 — 2026-11-12
+
+### Changed
+
+- **The default refresh interval is now 5 s**, matching the other DESS local
+  integrations and the vendor's web monitor. The allowed range is unchanged
+  (1–300 s); EyBond dongles keep their 5 s floor.
+- **Existing EyBond entries still on the old 10 s default are migrated to
+  5 s once.** A deliberate value on another transport, or any other EyBond
+  value, is left untouched. The entry version moves to 2 so the migration
+  runs exactly once.
+- **The Modbus snapshot cache TTL drops from 5 s to 2 s.** With a 5 s poll,
+  a 5 s TTL could serve the previous cycle's snapshot to the next one and
+  silently halve the effective refresh rate. Two seconds still covers every
+  command of one cycle.
+
+### Notes
+
+- Restart Home Assistant after updating so the migration and the new
+  interval are applied.
+- At 5 s the recorder writes roughly twice as many state rows per hour as at
+  10 s. Exclude entities you do not chart from the recorder if the database
+  grows too fast.
+
 ## 1.1.0-beta.4-anenji.7 — 2026-11-12
 
 ### Fixed

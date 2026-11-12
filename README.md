@@ -45,9 +45,11 @@ supplémentaire.
 | `modbus` | Modbus RTU, SMG-II | `tcp`, `eybond` |
 | `agent` | API HTTP locale `solar-system-agent` | `agent_http` |
 
-L'intervalle de mise à jour est réglable de 1 à 300 s. Les dongles EyBond ont un
-minimum de **5 s** : ils renouvellent leur session TCP toutes les quelques
-secondes, et un poll plus rapide tombe surtout dans les trous de connexion.
+L'intervalle de mise à jour est de **5 s par défaut** et réglable de 1 à 300 s.
+Les dongles EyBond ont un minimum de **5 s** : ils renouvellent leur session TCP
+toutes les quelques secondes, et un poll plus rapide tombe surtout dans les
+trous de connexion. Les entrées EyBond encore réglées sur l'ancien défaut de
+10 s passent automatiquement à 5 s lors de la mise à jour.
 
 ## Installation
 

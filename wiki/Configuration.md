@@ -137,10 +137,14 @@ Fields:
 How often Home Assistant polls the device, in seconds.
 
 - Allowed range: **1 – 300 s**.
-- Default: **10 s**.
+- Default: **5 s**, matching the other DESS local integrations and the
+  vendor's web monitor.
+- EyBond dongles have a **5 s minimum**: they cycle their TCP session every
+  few seconds, so a faster poll mostly hits connection gaps. Existing EyBond
+  entries still on the old 10 s default are moved to 5 s once by the
+  config-entry migration.
 - Lower values mean fresher sensor data but more load on the link and the
-  inverter. For slow links (Wi-Fi bridges, 2400-baud serial) keep this at
-  `10` or higher.
+  inverter. For slow links (Wi-Fi bridges, 2400-baud serial) raise this.
 
 ## Changing settings after install
 

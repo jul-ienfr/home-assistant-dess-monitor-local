@@ -320,7 +320,7 @@ these depending on installation.)
 ## Polling frequency & freshness
 
 - All fault entities update on the integration's coordinator cycle
-  (default **10 seconds**, configurable in the entry options).
+  (default **5 seconds**, configurable in the entry options).
 - `last_updated_ts` on the entity reflects the last time HA's state
   machine wrote a new state (state-change-only by default — see notes
   in `direct_sensor.py` about `state_class` / `force_update`).

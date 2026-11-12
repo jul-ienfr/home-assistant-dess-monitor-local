@@ -258,7 +258,7 @@ redémarrer Home Assistant.
 | Port | `8899` |
 | Broadcast | `192.168.71.255` |
 | Announce IP | *(vide — détection automatique)* |
-| Intervalle de mise à jour | `10` s |
+| Intervalle de mise à jour | `5` s |
 
 Sur HAOS ou une installation native, laisser `Announce IP` **vide** : tant
 qu'un dongle manque, l'intégration revérifie l'adresse locale toutes les 30 s
@@ -292,7 +292,7 @@ réseau.
   un parc 24 V chargé).
 - La tension AC de sortie doit être proche de 230 V.
 - Le mode de sortie doit refléter l'écran de l'onduleur.
-- L'horodatage de dernière mise à jour doit avancer toutes les 10 s.
+- L'horodatage de dernière mise à jour doit avancer toutes les 5 s.
 
 ## 6. NAT, Docker et VLAN
 

@@ -2,6 +2,10 @@
 # name for the integration.
 DOMAIN = "dess_monitor_local"
 
+# Bumped when stored options need a one-time migration; see the handler in
+# __init__.py. Version 1 entries predate the 5 s default.
+CONFIG_ENTRY_VERSION = 2
+
 # Config / options keys
 CONF_NAME = "name"
 CONF_DEVICE = "device"
@@ -114,7 +118,14 @@ DEFAULT_EYBOND_BROADCAST = "255.255.255.255"
 # bridge networking, where auto-detect returns the container's internal
 # IP (172.x) instead of the host's LAN IP.
 DEFAULT_EYBOND_ANNOUNCE_IP = ""
-DEFAULT_UPDATE_INTERVAL = 10
+# Five seconds matches the refresh rate of the other DESS local integrations
+# (and of the vendor's web monitor). The per-cycle command count is kept low
+# by the split cadence in DirectCoordinator, so a 5 s base tick still fits a
+# cycling EyBond dongle's connection window.
+DEFAULT_UPDATE_INTERVAL = 5
+# Interval stored by releases before the 5 s default. Only used to migrate
+# existing EyBond entries that never changed the old default.
+LEGACY_DEFAULT_UPDATE_INTERVAL = 10
 MIN_UPDATE_INTERVAL = 1
 # EyBond dongles clean-close/reopen their TCP session every ~4s and wait up to
 # 3s for a forwarded command; a 1s poll mostly hits session gaps. Five seconds

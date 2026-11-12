@@ -45,10 +45,10 @@ _SMG2_OPERATING_MODES = {
 # Over an EyBond dongle (half-duplex RS485) that hammering both starves the
 # bus and multiplies the chance of a missed reply (which makes the dongle drop
 # the TCP session). Cache the snapshot briefly so all commands of one poll
-# cycle share a single read. TTL is short enough that data stays fresh at the
-# default poll interval; very short intervals are effectively rate-limited to
-# it (fine — inverter state changes slowly).
-_SNAPSHOT_TTL = 5.0
+# cycle share a single read. The TTL must stay well below the 5 s default poll
+# interval, otherwise the next cycle could reuse the previous snapshot and the
+# effective refresh would silently drop to ~10 s.
+_SNAPSHOT_TTL = 2.0
 # A failed read is cached for only a fraction of a second so the
 # coordinator's 0.25 s retry can actually reach the inverter, while the
 # remaining commands of the same cycle still avoid re-hammering the bus.

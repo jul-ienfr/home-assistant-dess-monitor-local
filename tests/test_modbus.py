@@ -345,6 +345,31 @@ class TestSnapshotCache:
             asyncio.run(exercise_cycle())
         assert calls["n"] == 1
 
+    def test_snapshot_expires_between_five_second_cycles(self):
+        """At the 5 s cadence, each cycle must read a fresh snapshot.
+
+        A TTL equal to the poll interval lets the next cycle reuse the
+        previous read, silently halving the effective refresh rate.
+        """
+        calls = {"n": 0}
+
+        async def fake_snapshot(read_block):
+            calls["n"] += 1
+            return (dict(_SENSORS), dict(_CONFIG), {})
+
+        modadapter._clear_snapshot_cache()
+        clock = {"now": 1000.0}
+        uri = "eybond-modbus://0.0.0.0:8899/1?pn=PN_TTL"
+        with patch.object(
+            modadapter, "read_smg2_snapshot_via", side_effect=fake_snapshot
+        ), patch.object(
+            modadapter.time, "monotonic", side_effect=lambda: clock["now"]
+        ):
+            asyncio.run(modadapter.ModbusAdapter(uri).get_data("QPIGS"))
+            clock["now"] += 5.0
+            asyncio.run(modadapter.ModbusAdapter(uri).get_data("QPIGS"))
+        assert calls["n"] == 2
+
     def test_distinct_uris_cache_independently(self):
         calls = {"n": 0}
 

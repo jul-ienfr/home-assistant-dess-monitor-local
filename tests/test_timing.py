@@ -9,7 +9,9 @@ import pytest
 
 from custom_components.dess_monitor_local import timing
 from custom_components.dess_monitor_local.const import (
+    CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
+    LEGACY_DEFAULT_UPDATE_INTERVAL,
     MAX_UPDATE_INTERVAL,
     MIN_EYBOND_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
@@ -61,3 +63,32 @@ class TestClamp:
         assert timing.clamp_update_interval(
             1, minimum=MIN_EYBOND_UPDATE_INTERVAL
         ) == MIN_EYBOND_UPDATE_INTERVAL
+
+
+class TestMigration:
+    def test_default_is_five_seconds(self):
+        assert DEFAULT_UPDATE_INTERVAL == 5
+        assert MIN_EYBOND_UPDATE_INTERVAL == 5
+
+    def test_eybond_legacy_default_moves_to_five(self):
+        options = {CONF_UPDATE_INTERVAL: LEGACY_DEFAULT_UPDATE_INTERVAL}
+        migrated = timing.migrate_legacy_update_interval(
+            options, is_eybond=True
+        )
+        assert migrated[CONF_UPDATE_INTERVAL] == 5
+        # The input mapping itself is not mutated.
+        assert options[CONF_UPDATE_INTERVAL] == LEGACY_DEFAULT_UPDATE_INTERVAL
+
+    @pytest.mark.parametrize("interval", [1, 6, 30])
+    def test_other_eybond_values_are_preserved(self, interval):
+        options = {CONF_UPDATE_INTERVAL: interval}
+        assert timing.migrate_legacy_update_interval(
+            options, is_eybond=True
+        )[CONF_UPDATE_INTERVAL] == interval
+
+    def test_non_eybond_is_never_rewritten(self):
+        options = {CONF_UPDATE_INTERVAL: LEGACY_DEFAULT_UPDATE_INTERVAL}
+        migrated = timing.migrate_legacy_update_interval(
+            options, is_eybond=False
+        )
+        assert migrated[CONF_UPDATE_INTERVAL] == LEGACY_DEFAULT_UPDATE_INTERVAL

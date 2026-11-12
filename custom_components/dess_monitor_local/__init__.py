@@ -17,11 +17,16 @@ from custom_components.dess_monitor_local.coordinators.direct_coordinator import
 
 from . import debug_panel, eybond_hub, hub
 from .const import (
+    CONF_DEVICE,
     CONF_ENTRY_KIND,
+    CONF_PROTOCOL,
+    CONF_TRANSPORT,
+    CONFIG_ENTRY_VERSION,
     DOMAIN,
     ENTRY_KIND_DEVICE,
     ENTRY_KIND_EYBOND_HUB,
 )
+from .timing import is_eybond_transport, migrate_legacy_update_interval
 
 # List of platforms to support. There should be a matching .py file for each,
 # eg <cover.py> and <sensor.py>
@@ -38,6 +43,39 @@ def _entry_kind(entry: ConfigEntry) -> str:
         or entry.data.get(CONF_ENTRY_KIND)
         or ENTRY_KIND_DEVICE
     )
+
+
+def _is_eybond_entry(entry: ConfigEntry) -> bool:
+    """True when this entry is served by an EyBond dongle (single or hub)."""
+    if _entry_kind(entry) == ENTRY_KIND_EYBOND_HUB:
+        return True
+    options = entry.options or {}
+    data = entry.data or {}
+    return is_eybond_transport(
+        transport=options.get(CONF_TRANSPORT) or data.get(CONF_TRANSPORT),
+        protocol=options.get(CONF_PROTOCOL) or data.get(CONF_PROTOCOL),
+        uri=options.get(CONF_DEVICE) or data.get(CONF_DEVICE),
+    )
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """One-time options migration for entries created before the 5 s default.
+
+    Only EyBond entries still carrying the old 10 s default are moved; a
+    deliberate value on any transport is preserved. Non-EyBond entries just
+    get the new entry version.
+    """
+    if entry.version > CONFIG_ENTRY_VERSION:
+        # Written by a newer integration version: do not touch it.
+        return False
+    if entry.version < CONFIG_ENTRY_VERSION:
+        options = migrate_legacy_update_interval(
+            entry.options, is_eybond=_is_eybond_entry(entry)
+        )
+        hass.config_entries.async_update_entry(
+            entry, options=options, version=CONFIG_ENTRY_VERSION
+        )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:

@@ -17,7 +17,9 @@ from __future__ import annotations
 import logging
 
 from .const import (
+    CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
+    LEGACY_DEFAULT_UPDATE_INTERVAL,
     MAX_UPDATE_INTERVAL,
     MIN_EYBOND_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
@@ -95,3 +97,22 @@ def clamp_update_interval(
         )
         return maximum
     return interval
+
+
+def migrate_legacy_update_interval(
+    options: dict, *, is_eybond: bool
+) -> dict:
+    """Return options with the old 10 s default moved to the new 5 s one.
+
+    Only an EyBond entry that still carries the previous default is
+    rewritten. Any other value — including a deliberate 10 s on another
+    transport — is preserved, because it cannot be distinguished from an
+    untouched default and should not be changed behind the user's back.
+    """
+    options = dict(options)
+    if (
+        is_eybond
+        and options.get(CONF_UPDATE_INTERVAL) == LEGACY_DEFAULT_UPDATE_INTERVAL
+    ):
+        options[CONF_UPDATE_INTERVAL] = DEFAULT_UPDATE_INTERVAL
+    return options

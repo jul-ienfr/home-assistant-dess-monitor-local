@@ -39,6 +39,7 @@ from .const import (
     CONF_STRICT_CRC,
     CONF_TRANSPORT,
     CONF_UPDATE_INTERVAL,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_AGENT_PORT,
     DEFAULT_DEBUG_PANEL,
     DEFAULT_EYBOND_ANNOUNCE_IP,
@@ -521,7 +522,7 @@ def _transport_schema(protocol: str, default_transport: str) -> vol.Schema:
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
     def __init__(self):

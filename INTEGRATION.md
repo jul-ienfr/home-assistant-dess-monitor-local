@@ -196,9 +196,10 @@ integration card.
 Common option for all protocols:
 
 - **Update interval** — how often Home Assistant polls the device, `1`–`300` s
-  (default `10`). EyBond dongles have a **5 s minimum** because they cycle
+  (default `5`). EyBond dongles have a **5 s minimum** because they cycle
   their TCP session every few seconds; faster polls mostly hit connection
-  gaps.
+  gaps. Existing EyBond entries still on the old 10 s default are moved to
+  5 s once by the config-entry migration.
 
 For a single SMG-II behind an EyBond dongle, choose protocol `modbus`,
 transport `eybond`, bind `0.0.0.0:8899`, and the RS485 address (usually `1`).
